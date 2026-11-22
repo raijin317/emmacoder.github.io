@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en" class="h-full antialiased">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#66BB6A" />
+    <title>Emma English Studio</title>
+    <meta name="description" content="A bright family English learning space, built from your child's own textbooks." />
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;600;700;800&display=swap" />
+    <link rel="stylesheet" href="assets/app.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "react": "./vendor/react.js",
+          "react-dom/client": "./vendor/react.js",
+          "htm": "./vendor/htm.js",
+          "zod": "./vendor/zod.js",
+          "pdfjs": "./vendor/pdf.min.js",
+          "next/link": "./src/shims/link.js",
+          "next/navigation": "./src/shims/navigation.js",
+          "@/": "./src/"
+        }
+      }
+    </script>
+    <link rel="modulepreload" href="vendor/react.js" />
+    <link rel="modulepreload" href="vendor/zod.js" />
+    <script type="module" src="src/main.js"></script>
+  </head>
+  <body class="min-h-full flex flex-col">
+    <div id="root" style="display: contents">
+      <main style="min-height: 100vh; display: flex; align-items: center; justify-content: center; font-size: 4rem" aria-label="Loading">🍀</main>
+    </div>
+    <noscript>
+      <p style="padding: 2rem; font-family: sans-serif">Emma English Studio needs JavaScript. Please turn it on and reload the page.</p>
+    </noscript>
+  </body>
+</html>
