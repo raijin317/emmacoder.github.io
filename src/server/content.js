@@ -1,7 +1,5 @@
 import { buildQuickPack } from "@/lib/quickPack.js";
 import { PROFILES, assessBook } from "@/lib/assessment.js";
-import { RULE, ruleOn } from "@/lib/rules.js";
-import { bookTexts, isFromBook, wordsOutsideBook } from "@/lib/bookText.js";
 import { gameHistory } from "@/lib/games.js";
 import { createItem, getBook, getLessonRules, listItems, listUnits, upsertBook } from "./repo.js";
 import { grammarItem } from "@/lib/offlineGrammar.js";
@@ -33,28 +31,7 @@ export function earlierLanguage(unit) {
         wordCards: before.flatMap((u) => u.extract.vocabulary.filter((v) => v.emoji).map((v) => ({ word: v.word, emoji: v.emoji }))).slice(-20),
     };
 }
-/**
- * Applies the family's rules to Claude's items: an item that uses words which are not in the book is dropped
- * (rule "book-only"), and so is a reading whose passage is not the book's own text (rule "book-reading").
- * The offline builder then makes those types from the book itself.
- */
-export function enforceRules(items, o) {
-    const texts = bookTexts(o.unit.extract);
-    return items.filter((it) => {
-        if (ruleOn(o.rules, RULE.bookOnly)) {
-            const outside = wordsOutsideBook(it, o.allowedWords);
-            if (outside.length) {
-                o.log?.(`Unit ${o.unit.order}: “${it.title}” used words that are not in the book (${outside.slice(0, 4).join(", ")}) — left out.`);
-                return false;
-            }
-        }
-        if (it.type === "reading" && ruleOn(o.rules, RULE.bookReading) && !isFromBook(it.data.passage, texts)) {
-            o.log?.(`Unit ${o.unit.order}: the reading text was not the book's own — left out.`);
-            return false;
-        }
-        return true;
-    });
-}
+export { enforceRules } from "@/lib/enforceRules.js";
 function saveDrafts(unit, stage, items, by) {
     return items.map((it) => createItem({ source: "book", bookId: unit.bookId, unitId: unit.id, inspirationTopicId: null, type: it.type, title: it.title, status: "draft", stage: stage, data: it.data, createdBy: by }));
 }

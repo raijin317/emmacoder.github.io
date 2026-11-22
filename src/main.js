@@ -8,11 +8,12 @@ import { createRoot } from "react-dom/client";
 import { html } from "@/lib/html.js";
 import { useRoute } from "next/navigation";
 import Link from "next/link";
-import { openDb } from "@/server/db.js";
+import { flushSave, openDb } from "@/server/db.js";
 import { installApi } from "@/server/routes.js";
 import { seedDemo } from "@/server/demo.js";
 import { getSetting, listBooks, listChildren } from "@/server/repo.js";
 import { loadPageIndex } from "@/server/books/pages.js";
+import { loadBuiltInBooks } from "@/server/books/builtin.js";
 import { persistStorage } from "@/server/vfs.js";
 import { SettingsSync } from "@/features/SettingsSync.js";
 import { Loading } from "@/components/kids/index.js";
@@ -124,6 +125,9 @@ async function boot() {
     installApi();
     // A brand-new device gets the demo book and a demo child, so there is something to try at once.
     if (getSetting("demoSeeded") !== "1" && !listBooks().length && !listChildren().length) seedDemo();
+    // Books published with the site (content/books/, made with Import_Book.md): new or updated ones are added.
+    await loadBuiltInBooks();
+    await flushSave();
     void persistStorage();
   } catch (e) {
     console.error(e);

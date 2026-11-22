@@ -51,6 +51,32 @@ function ImportPanel({ onDone }) {
     const [title, setTitle] = useState("");
     const [grade, setGrade] = useState("");
     const fileInput = useRef(null);
+    const pkgInput = useRef(null);
+    const [pkgMsg, setPkgMsg] = useState(null);
+    /** A book package made by Claude (Import_Book.md): units + lessons in one file. */
+    const importPackage = async (file) => {
+        setError(null);
+        setPkgMsg(null);
+        setBusy(file.name);
+        try {
+            let json;
+            try {
+                json = JSON.parse(await file.text());
+            }
+            catch {
+                throw new Error("This file is not a book package (it is not JSON).");
+            }
+            const r = await api("/api/books/package", { body: { package: json } });
+            const kept = [...new Set([...r.keptUnits, ...r.keptLessons])];
+            setPkgMsg(`✅ ${r.units} units and ${r.lessons} lessons added.${kept.length ? ` Your own changes in unit ${kept.join(", ")} were kept.` : ""}`);
+            onDone();
+            router.push(`/parent/books/${r.bookId}`);
+        }
+        catch (e) {
+            setError(`${e.message}${e.details ? `\n${e.details}` : ""}`);
+        }
+        setBusy(null);
+    };
     const upload = async (file) => {
         setError(null);
         setBusy(file.name);
@@ -102,8 +128,18 @@ function ImportPanel({ onDone }) {
         if (f)
             void upload(f);
     }} />
+        <${Button} disabled=${!!busy} onClick=${() => pkgInput.current?.click()} title="A book prepared by Claude with Import_Book.md (a .json file): its units and lessons are added at once">
+          📦 Import a book package
+        <//>
+        <input ref=${pkgInput} type="file" accept="application/json,.json" className="hidden" data-testid="book-package" onChange=${(e) => {
+        const f = e.target.files?.[0];
+        e.target.value = "";
+        if (f)
+            void importPackage(f);
+    }} />
         <span className="text-sm text-ink-soft">A big book can take a minute or two — keep this tab open.</span>
       </div>
+      ${pkgMsg && html`<p className="mt-2 font-bold text-grass-deep">${pkgMsg}</p>`}
       ${busy && html`<div className="mt-3">
           <${ProgressBar} value=${progress} tone="bg-sky" />
           ${status && html`<p className="mt-1 text-sm font-bold">${status}</p>`}
@@ -126,7 +162,7 @@ function ImportPanel({ onDone }) {
         </label>
         <${Button} type="submit" disabled=${!title.trim()}>➕ New book<//>
       </form>
-      ${error && html`<p className="mt-2 font-bold text-berry-deep">❌ ${error}</p>`}
+      ${error && html`<p className="mt-2 whitespace-pre-wrap font-bold text-berry-deep">❌ ${error}</p>`}
     <//>`);
 }
 /* -------------------------------- List -------------------------------- */

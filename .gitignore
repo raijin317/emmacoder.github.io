@@ -2,3 +2,6 @@ node_modules/
 .DS_Store
 Thumbs.db
 *.log
+
+# Book PDFs and Claude's work files (Import_Book.md) — never published.
+resources/

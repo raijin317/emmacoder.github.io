@@ -18,7 +18,9 @@ export function route(fn) {
     try {
       return await fn(req, ctx);
     } catch (e) {
-      console.error("[api]", e);
+      // A JobError is a clear message for the parent (bad file, missing words…), not a bug.
+      if (e instanceof JobError) console.warn("[api]", e.message);
+      else console.error("[api]", e);
       return fail(e?.message || "Something went wrong.", 500, e instanceof JobError ? e.details : undefined);
     }
   };

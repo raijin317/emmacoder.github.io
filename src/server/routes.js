@@ -9,12 +9,13 @@ import {
   getItem, getLessonRules, getSetting, getTopic, getUnit, importAll, listBooks, listChildren, listItems, listTopics, listUnits, recordAttempt, saveChild,
   setActiveBook, setLessonRules, setPin, setSetting, topicChildren, updateItem, updateTopic, updateUnit, upsertBook, upsertUnit,
 } from "./repo.js";
-import { migrateAgain, newId, saveNow, tx } from "./db.js";
+import { flushSave, migrateAgain, newId, saveNow, tx } from "./db.js";
 import { reassessBook, quickPackForUnit } from "./content.js";
 import { picturesForItem, unitCovers } from "./pictures.js";
 import { generateBookResources, generateUnitResources } from "./books/resources.js";
 import { bookIdFor, cropBlob, fileHash, gradeHintFromName, hasPages, pageBlob, removePages, renderPdfPages } from "./books/pages.js";
 import { buildTopicItems, topicGames } from "./topics.js";
+import { importBookPackage, markPackageRemoved } from "./books/package.js";
 import { topUpGames } from "./gameRefresh.js";
 import { childFit, PROFILES, assessBook } from "@/lib/assessment.js";
 import { CHILD_TYPES } from "@/lib/contentMeta.js";
@@ -145,7 +146,17 @@ on("PATCH", "/api/books/:bookId", async (req, { bookId }) => {
   return ok({ book: reassessBook(bookId) });
 });
 
+/** Imports a book package (made by Claude following Import_Book.md): { package, force? }. */
+on("POST", "/api/books/package", async (req) => {
+  const b = await body(req);
+  if (!b.package || typeof b.package !== "object") return fail("Please choose a book package file (.json).");
+  const report = importBookPackage(b.package, { force: !!b.force });
+  warmVoices();
+  return ok(report);
+});
+
 on("DELETE", "/api/books/:bookId", async (_req, { bookId }) => {
+  markPackageRemoved(bookId);
   deleteBook(bookId);
   await removePages(bookId);
   return ok({ ok: true });
@@ -533,7 +544,12 @@ export function installApi() {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     if (!isApi(url)) return realFetch(input, init);
     const req = input instanceof Request ? input : new Request(new URL(url, location.href), init);
-    return handleApi(req);
+    return handleApi(req).then(async (res) => {
+      // A change is on disk (IndexedDB) before the screen hears "done" — closing or reloading the tab can't lose it.
+      // (Long jobs that stream their progress save as they go.)
+      if (req.method !== "GET" && !res.headers.get("Content-Type")?.startsWith("text/event-stream")) await flushSave();
+      return res;
+    });
   };
 }
 

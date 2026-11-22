@@ -11,7 +11,7 @@ Góc học tiếng Anh cho gia đình: phụ huynh soạn bài từ sách giáo 
 | | Bản desktop | Bản web tĩnh |
 |---|---|---|
 | Dữ liệu | SQLite trên máy (`data/app.db`) | SQLite (sql.js) **trong trình duyệt**, lưu ở IndexedDB của máy đang dùng |
-| Thêm sách | Claude đọc PDF, tự tìm unit và từ vựng | PDF được dựng trang ngay trong trình duyệt; phụ huynh **tự thêm unit** và gõ từ / mẫu câu / câu / bài đọc, chọn hình từ trang sách |
+| Thêm sách | Claude đọc PDF, tự tìm unit và từ vựng | Nhờ Claude (Claude Code) tạo **gói sách** theo `Import_Book.md`; hoặc tự thêm: PDF được dựng trang ngay trong trình duyệt, phụ huynh tự thêm unit và gõ từ / mẫu câu / câu / bài đọc, chọn hình từ trang sách |
 | Tạo bài học | Claude + bộ dựng offline | **Bộ dựng offline** (đủ 10 loại: từ vựng, nghe, nói, ngữ pháp từ mẫu câu, đọc, 2 trò chơi, quiz, phiếu bài tập, giáo án, bài kiểm tra) |
 | Inspiration topic | Tạo bằng AI Studio (chat với Claude) | Form **➕ New topic** (tiêu đề, danh sách từ + emoji, mẫu câu, câu, bài đọc); mở / lưu topic dạng file JSON |
 | Giọng đọc | Kokoro chạy trên máy (Node) | Mặc định giọng trình duyệt; bật **giọng tự nhiên Kokoro** trong Settings → tải 1 lần (~90 MB), chạy ngay trong trình duyệt |
@@ -31,6 +31,14 @@ Giữ nguyên: giao diện, màn hình bé (My World, Bonus islands, sticker alb
 **Quan trọng:** dữ liệu chỉ nằm trong trình duyệt của máy đang dùng. Xoá dữ liệu trình duyệt hoặc dùng cửa sổ ẩn danh là mất. Thỉnh thoảng vào **Settings → 💾 Export backup** để giữ một bản; muốn chuyển sang máy khác thì **Restore from file** ở máy đó (file PDF không nằm trong backup — thêm lại PDF ở máy mới để thấy trang sách và hình).
 
 Chuyển dữ liệu từ bản desktop: ở app cũ vào Settings → Export backup → ở web này vào Settings → Restore from file.
+
+## Nhập sách bằng Claude (Import_Book.md)
+
+Muốn có bộ bài học đầy đủ như tính năng "Import Book" của bản desktop: đặt PDF vào `resources/book/` (không bao giờ được đưa lên GitHub) và nói với Claude *"Đọc Import_Book.md và import sách `resources/book/<tên file>.pdf`"*. Claude đọc sách, viết từng unit và các bài học, rồi tạo **gói sách** `content/books/<bookId>.json`:
+
+- Gói trong `content/books/` (liệt kê ở `content/books/index.json`) được web **tự nạp** khi mở — push lên GitHub là mọi trình duyệt đều có sách đó. Gói có phiên bản mới thì được nạp lại, nhưng phần phụ huynh đã sửa được giữ nguyên.
+- Muốn **riêng tư** thì nói thêm "giữ riêng tư": gói nằm ở `resources/packages/` và bạn tự nhập bằng **Parent → Books → 📦 Import a book package**.
+- Kiểm tra một gói: `node tools/book-package.mjs check content/books/<bookId>.json -v`.
 
 ## Chạy thử trên máy
 
@@ -58,7 +66,9 @@ src/components/       giao diện chung (kids, ui, Pic, ApiImg)
 src/features/         các màn hình (child, parent, players, present, print)
 src/server/           "server" chạy trong trình duyệt: db.js (sql.js + IndexedDB), repo.js, routes.js (các /api/…),
                       books/pages.js (dựng trang PDF, cắt hình), books/resources.js, topics.js
-tools/                app.src.css (nguồn CSS), serve.mjs (server thử)
+tools/                app.src.css (nguồn CSS), serve.mjs (server thử), book-package.mjs (tạo / kiểm tra gói sách)
+content/books/        gói sách do Claude tạo theo Import_Book.md (index.json + <bookId>.json)
+Import_Book.md        chỉ dẫn cho Claude khi nhập một sách PDF
 ```
 
 Mã giao diện viết bằng JavaScript thuần với [htm](https://github.com/developit/htm) — cú pháp giống JSX nhưng chạy thẳng trong trình duyệt:

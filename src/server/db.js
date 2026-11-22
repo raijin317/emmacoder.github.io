@@ -198,6 +198,11 @@ function changed() {
   saveTimer = setTimeout(() => void saveNow(), 250);
 }
 
+/** Saves now if there are unsaved changes (the API calls it before answering a change, so a reload never loses it). */
+export async function flushSave() {
+  if (saveTimer) await saveNow();
+}
+
 export async function saveNow() {
   clearTimeout(saveTimer);
   saveTimer = null;
