@@ -6,9 +6,13 @@
   "description": "Emma English Studio as a static website (GitHub Pages). No build is needed to run it; npm is only used to rebuild the CSS after changing Tailwind classes.",
   "scripts": {
     "build:css": "tailwindcss -i tools/app.src.css -o assets/app.css --minify",
-    "serve": "node tools/serve.mjs"
+    "serve": "node tools/serve.mjs",
+    "book:pages": "node tools/render-pages.mjs",
+    "book:package": "node tools/book-package.mjs"
   },
   "devDependencies": {
-    "@tailwindcss/cli": "4.3.3"
+    "@napi-rs/canvas": "1.2.0",
+    "@tailwindcss/cli": "4.3.3",
+    "pdfjs-dist": "6.5.438"
   }
 }

@@ -29,6 +29,8 @@ The site does the rest when it imports the package (`src/server/books/package.js
 ## 2. Tools
 
 ```
+npm install                                                      # once: the tools below need pdfjs-dist and @napi-rs/canvas
+npm run book:pages -- <book.pdf>                                 # every page → resources/.work/<bookId>/pages/p-001.png …
 node tools/book-package.mjs id <book.pdf>                       # book id + page count (same id as the app makes)
 node tools/book-package.mjs assemble resources/.work/<bookId> -v # work files → package + check + index
 node tools/book-package.mjs assemble resources/.work/<bookId> --out resources/packages/<bookId>.json -v   # private
@@ -38,7 +40,7 @@ node tools/book-package.mjs index                                # rebuild conte
 
 `check` uses the site's own schemas and rules. It prints the book's **level** (the numbers you must write to), per unit what is there, what the rules would drop (❌ errors) and what looks off (⚠️ warnings: wrong emoji, sentences too long for the level, missing lesson types).
 
-Read the PDF with the **Read** tool and its `pages` parameter (`"1-10"`; at most 20 pages per call). Textbooks are usually scanned pictures, so read the pages as images. **Page numbers in everything you write are PDF page indexes** (1 = the first page of the file), never the numbers printed on the pages.
+Look at the pages with the **Read** tool on the PNG files from `npm run book:pages` (`resources/.work/<bookId>/pages/p-007.png` = PDF page 7). They are drawn at the same size as the site draws pages, so a picture box measured on them matches the app. (Reading the PDF itself with `pages` needs poppler, which is not installed on the family PC.) Textbooks are usually scanned pictures, so read the pages as images. **Page numbers in everything you write are PDF page indexes** (1 = the first page of the file), never the numbers printed on the pages.
 
 Source of truth for every format: `src/lib/schemas/package.js`, `src/lib/schemas/book.js`, `src/lib/schemas/content.js`. If this file and the schemas disagree, the schemas win.
 
@@ -50,8 +52,11 @@ Work step by step and **write each result to its work file as soon as it is read
 
 ### Step 1 — Prepare
 
-1. `node tools/book-package.mjs id <pdf>` → `id`, `fileName`, `pageCount`.
-2. Create `resources/.work/<id>/` with `units/` and `lessons/` inside.
+1. `npm install` (first time), then `npm run book:pages -- <pdf>` → the page images (about 15 s for 80 pages).
+2. `node tools/book-package.mjs id <pdf>` → `id`, `fileName`, `pageCount`.
+3. Create `resources/.work/<id>/` with `units/` and `lessons/` inside.
+
+Tip: once the units are written, check every picture box by eye — cut them all from the page images onto one sheet and look at it (a box that shows a printed number, a label or half of the next picture needs fixing).
 
 ### Step 2 — Overview: the book and its units → `book.json`
 
