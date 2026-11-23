@@ -5,7 +5,7 @@
 > Muốn giữ riêng tư (không đưa nội dung sách lên web public), nói thêm: *"giữ riêng tư"*.
 > Claude đọc sách, **vẽ hình cho từng từ** (giống hình trong sách, kiểu hoạt hình dễ thương) và viết bài học theo 4 quy tắc ở mục 2. Xong việc, Claude báo kết quả.
 > Bạn push repo lên GitHub (hoặc vào **Parent → Books → 📦 Import a book package**), rồi vào **Children → Edit** tích chọn sách cho bé.
-> Mỗi từ có **3 lựa chọn hình**: ✏️ hình Claude vẽ, 📖 hình trong sách (cần thêm PDF của sách vào trình duyệt), 😀 emoji. Bạn chọn hình bé sẽ thấy ở trang unit → tab **📖 From the book** → cột **Picture your child sees** (hoặc nút **All words** cho cả unit), rồi **💾 Save**.
+> Mỗi từ có **4 lựa chọn hình**: 🖼️ ảnh của bạn (bấm ⬆️ để tải ảnh từ máy), ✏️ hình Claude vẽ, 📖 hình trong sách (cần thêm PDF của sách vào trình duyệt), 😀 emoji. Bạn chọn hình bé sẽ thấy ở trang unit → tab **📖 From the book** → cột **Picture your child sees** (hoặc nút **All words** cho cả unit), rồi **💾 Save**.
 
 **This file is for Claude.** Follow it whenever the parent asks you to import a book. It is the static site's version of the desktop app's **Import Book** feature (`D:\Project_Workspace\01_Dashbord_ENG`): there, the app called Claude to read the PDF, find the units, extract what each unit teaches, assess the level and write the lessons. Here **you** do those steps — and draw a picture for every unit word — and write one **book package** (JSON). The site imports the package, checks your lessons against the family's lesson rules and adds the lessons it always builds itself.
 
@@ -24,7 +24,7 @@ Use the private output when the parent says so ("private", "riêng tư", "don't 
 
 The site does the rest when it imports the package (`src/server/books/package.js`):
 - the units are **approved** at once (like the desktop import), and the level/age assessment is computed from them (`assessBook`);
-- every unit word offers the parent **three pictures**: your **drawing** (stored with the book, shown in every browser without the PDF), the **book's own picture** (cut from the page at the word's `pic` box — only in a browser where the parent added the PDF) and its **emoji**. The parent picks one per word in the unit page (📖 From the book → *Picture your child sees*); not picked = your drawing, else the book's picture, else the emoji. The chosen picture replaces the emoji in every activity, game and printout;
+- every unit word offers the parent **three pictures from you**: your **drawing** (stored with the book, shown in every browser without the PDF), the **book's own picture** (cut from the page at the word's `pic` box — only in a browser where the parent added the PDF) and its **emoji** — plus a fourth the parent can add in the app: **their own picture** (uploaded from their device, kept in that browser and its backup). The parent picks one per word in the unit page (📖 From the book → *Picture your child sees*); not picked = the parent's picture, else your drawing, else the book's picture, else the emoji. The chosen picture replaces the emoji in every activity, game and printout;
 - your lessons are checked: a lesson that uses a word outside the book, or a reading that is not the book's own text, is **dropped** and rebuilt offline;
 - the app **always builds** `vocabulary`, two mini `game`s (chosen by topic, different from the units just before) and a `worksheet`, and builds offline any of your lesson types that is missing;
 - a newer package `version` is imported again, but a unit whose words the parent edited, or whose lessons the parent edited, keeps the parent's version.
@@ -63,7 +63,7 @@ What it means for you — **every word gets three pictures**, so the parent can 
 2. 📖 **The book's own picture** — a `pic` box for every word (where its picture is on the page). If the unit has no picture of the word, box the clearest picture of it anywhere in the book (e.g. "sixteen" → the cake with the 16 candle on another page). A review unit may leave out the box of a word an earlier unit has — the app uses that one.
 3. 😀 **The emoji** — one `emoji` per word, and exactly that emoji for the word in the lessons: the app swaps the emoji for the chosen picture (in `mc` and `tf` questions it finds the picture by the emoji).
 
-The parent picks one per word (or for the whole unit) in the app. You may preset the choice with `"show": "drawing" | "book" | "emoji"` on a word — normally leave it out (= your drawing first); use `"book"` only for a word whose book picture is much clearer than anything you can draw, and say so in the report.
+The parent picks one per word (or for the whole unit) in the app, and can also upload a picture of their own (🖼️) for any word — that one is the parent's, never part of a package. You may preset the choice with `"show": "drawing" | "book" | "emoji"` on a word — normally leave it out (= your drawing first); use `"book"` only for a word whose book picture is much clearer than anything you can draw, and say so in the report. Never write `"show": "own"`.
 
 How it is checked: `check` prints how many words have each of the three pictures, reports ⚠️ **rule 2** for a word without a drawing, a word without a book picture box, or a `show` pointing to a picture that is not there, and ❌ for a drawing that is not a safe, plain picture (see §6 "Drawings"). `pictures` puts the book's picture and your drawing side by side; `pictures --big` shows your drawings large, to judge their quality.
 
@@ -240,7 +240,7 @@ What each type should be:
    - private output: **Parent → Books → 📦 Import a book package** → choose `resources/packages/<id>.json`;
    - then **Children → Edit** → tick the book for the child;
    - optional: **📎 Add the book's PDF** in the book's page to see the book pages (for the parent) and to be able to choose the book's own pictures (in that browser only);
-   - review the pictures: each unit → **📖 From the book** → *Picture your child sees*: ✏️ drawing / 📖 book picture / 😀 emoji per word, or **All words** for the whole unit → **💾 Save**.
+   - review the pictures: each unit → **📖 From the book** → *Picture your child sees*: ✏️ drawing / 📖 book picture / 😀 emoji per word (or ⬆️ to add 🖼️ a picture of your own), or **All words** for the whole unit → **💾 Save**.
 
 Don't publish the PDF or page images anywhere, and don't commit anything in `resources/`.
 
@@ -285,7 +285,7 @@ The finished package (`assemble` builds it from the work files):
 | `pages` | `[first, last]` | PDF page indexes, last ≥ first, ≤ pageCount |
 | `vocabulary` | `[{ word, emoji, vi?, partOfSpeech?, page?, pic, show? }]` | ≥ 3 words, or the app can't make lessons |
 | `vocabulary[].pic` | `{ page, box: [left, top, width, height] }` | fractions 0–1 of the page image; every word (rule 2) |
-| `vocabulary[].show` | `"drawing"` \| `"book"` \| `"emoji"` | optional: the picture the child sees at first (left out = drawing, then book picture, then emoji) |
+| `vocabulary[].show` | `"drawing"` \| `"book"` \| `"emoji"` | optional: the picture the child sees at first (left out = drawing, then book picture, then emoji). `"own"` exists only in the app (the parent's uploaded picture) — never in a package |
 | `patterns` | `[{ text, function, page? }]` | the slot as `___` |
 | `sentences` | `string[]` | exactly as printed, ≤ 25 |
 | `readings` | `[{ title, text, page? }]` | exactly as printed, `\n` line breaks |

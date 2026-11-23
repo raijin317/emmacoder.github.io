@@ -238,6 +238,7 @@ function check(file, verbose) {
     for (const v of words) {
       if (v.show === "drawing" && !drawn.has(picKey(v.word))) warn(`“${v.word}” is set to show the drawing, but there is no drawing of it`);
       if (v.show === "book" && !boxed.has(picKey(v.word))) warn(`“${v.word}” is set to show the book's picture, but no unit has a box for it`);
+      if (v.show === "own") warn(`“${v.word}”: "show": "own" is the parent's own picture, added in the app — leave it out of a package`);
     }
     const undrawn = words.filter((v) => !drawn.has(picKey(v.word))).map((v) => v.word);
     if (undrawn.length) warn(`rule 2: no drawing for ${undrawn.map((w) => `“${w}”`).join(", ")} — draw pictures/${pictureFile(undrawn[0])}${undrawn.length > 1 ? " …" : ""}`);

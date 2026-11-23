@@ -110,6 +110,16 @@ CREATE TABLE IF NOT EXISTS book_pictures (
   PRIMARY KEY (book_id, word_key)
 );
 
+-- Pictures the parent added for a book's words (unit page → "Picture your child sees"): picKey(word) → image (base64).
+CREATE TABLE IF NOT EXISTS own_pictures (
+  book_id TEXT NOT NULL,
+  word_key TEXT NOT NULL,
+  mime TEXT NOT NULL,
+  data TEXT NOT NULL,
+  version TEXT NOT NULL,
+  PRIMARY KEY (book_id, word_key)
+);
+
 CREATE TABLE IF NOT EXISTS chat_threads (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,

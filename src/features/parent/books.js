@@ -384,9 +384,9 @@ export function BookDetail({ bookId }) {
               <div className="min-w-0 flex-1">
                 <p className="flex items-center gap-1 font-bold">
                   ${u.extract.vocabulary.slice(0, 3).map((v, k) => {
-        // The picture chosen for the word in the unit's word list (drawing, book picture or emoji).
-        const kind = pictureKind(v, { drawing: !!data.drawn?.[picKey(v.word)], book: !!v.pic && book.hasPages });
-        return kind === "drawing" ? html`<${ApiImg} key=${k} src=${data.drawn[picKey(v.word)]} fallback=${v.emoji} alt=${v.word} title="Drawn by Claude" className="h-8 w-8 rounded-md border border-line bg-white object-contain" />` : kind === "book" ? (html`<${ApiImg} key=${k} src=${cropUrl(book.id, v.pic, 160)} alt=${v.word} title="Picture from the book" className="h-8 w-8 rounded-md border border-line bg-white object-contain" />`) : (html`<span key=${k}>${v.emoji}</span>`);
+        // The picture chosen for the word in the unit's word list (own picture, drawing, book picture or emoji).
+        const kind = pictureKind(v, { own: !!data.own?.[picKey(v.word)], drawing: !!data.drawn?.[picKey(v.word)], book: !!v.pic && book.hasPages });
+        return kind === "own" ? html`<${ApiImg} key=${k} src=${data.own[picKey(v.word)]} fallback=${v.emoji} alt=${v.word} title="Your picture" className="h-8 w-8 rounded-md border border-line bg-white object-contain" />` : kind === "drawing" ? html`<${ApiImg} key=${k} src=${data.drawn[picKey(v.word)]} fallback=${v.emoji} alt=${v.word} title="Drawn by Claude" className="h-8 w-8 rounded-md border border-line bg-white object-contain" />` : kind === "book" ? (html`<${ApiImg} key=${k} src=${cropUrl(book.id, v.pic, 160)} alt=${v.word} title="Picture from the book" className="h-8 w-8 rounded-md border border-line bg-white object-contain" />`) : (html`<span key=${k}>${v.emoji}</span>`);
     })}${" "}
                   ${u.title}
                 </p>

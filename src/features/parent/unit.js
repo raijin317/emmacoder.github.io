@@ -2,7 +2,8 @@ import { html, Fragment } from "@/lib/html.js";
 import { ApiImg } from "@/components/ApiImg.js";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { shrinkImage } from "@/lib/client/image.js";
 import { api, useApi } from "@/lib/client/api.js";
 import { Badge, Button, PageHeader, Panel, inputCls } from "@/components/ui.js";
 import { ErrorBox, Loading, SpeakButton } from "@/components/kids/index.js";
@@ -71,7 +72,7 @@ function ExtractEditor({ data, onSaved }) {
     const [picking, setPicking] = useState(null);
     const [range, setRange] = useState(unit.pages);
     const upd = (f) => {
-        setEx(f(structuredClone(ex)));
+        setEx((cur) => f(structuredClone(cur)));
         setDirty(true);
     };
     const save = async (status) => {
@@ -92,13 +93,49 @@ function ExtractEditor({ data, onSaved }) {
     // Pictures Claude drew for the book's words (book package, lesson rule 2).
     const hasDrawings = Object.keys(data.drawn ?? {}).length > 0;
     const pages = book.isDemo || !book.hasPages ? [] : Array.from({ length: Math.max(0, Math.min(unit.pages[1], book.pageCount || unit.pages[1]) - unit.pages[0] + 1) }, (_, k) => unit.pages[0] + k);
-    // Each word can show Claude's drawing, the book's own picture (needs the PDF in this browser) or its emoji.
-    // A word met again (review units) without its own book picture or choice uses the ones from an earlier unit.
+    // Each word can show the parent's own picture, Claude's drawing, the book's own picture (needs the PDF in
+    // this browser) or its emoji. A word met again (review units) without its own book picture or choice uses
+    // the ones from an earlier unit.
     const pdf = !book.isDemo && !!book.hasPages;
-    const choosePictures = hasDrawings || pdf;
     const bookPic = (v) => v.pic ?? data.earlier?.pic?.[picKey(v.word)];
-    const has = (v) => ({ drawing: !!data.drawn?.[picKey(v.word)], book: !!bookPic(v) && pdf });
+    const showBook = pdf || ex.vocabulary.some((v) => bookPic(v));
+    const hasOwn = Object.keys(data.own ?? {}).length > 0;
+    const has = (v) => ({ own: !!data.own?.[picKey(v.word)], drawing: !!data.drawn?.[picKey(v.word)], book: !!bookPic(v) && pdf });
     const showAll = (kind) => upd((x) => (x.vocabulary.forEach((v) => (v.show = kind)), x));
+    // The parent's own pictures are kept with the book at once; the choice is kept with 💾 Save.
+    const fileInput = useRef(null);
+    const uploadFor = useRef(null);
+    const [busyPic, setBusyPic] = useState(null);
+    const chooseFile = (k) => {
+        uploadFor.current = k;
+        fileInput.current?.click();
+    };
+    const addOwn = async (k, file) => {
+        const word = ex.vocabulary[k]?.word ?? "";
+        if (!picKey(word))
+            return setMsg("❌ Type the word first, then add its picture.");
+        setMsg(null);
+        setBusyPic(k);
+        try {
+            const image = await shrinkImage(file);
+            await api(`/api/books/${book.id}/own/${encodeURIComponent(picKey(word))}`, { method: "PUT", body: { image } });
+            upd((x) => ((x.vocabulary[k].show = "own"), x));
+            setMsg(`🖼️ Picture added for “${word}” — press 💾 Save to keep your choices.`);
+            onSaved();
+        }
+        catch (e) {
+            setMsg(`❌ ${e.message}`);
+        }
+        setBusyPic(null);
+    };
+    const removeOwn = async (k) => {
+        const word = ex.vocabulary[k]?.word ?? "";
+        if (!confirm(`Remove your picture of “${word}”?`))
+            return;
+        await api(`/api/books/${book.id}/own/${encodeURIComponent(picKey(word))}`, { method: "DELETE" });
+        upd((x) => (x.vocabulary.forEach((v) => v.show === "own" && picKey(v.word) === picKey(word) && delete v.show), x));
+        onSaved();
+    };
     return (html`<div className="flex flex-col gap-6">
       ${unit.status !== "approved" && (html`<div className="rounded-2xl bg-orange-soft p-4">
           <b>Type in what this unit of the book teaches</b> — its words (each with an emoji${book.hasPages ? " and the book's picture" : ""}), sentence patterns, sentences and reading texts — then approve. Only approved units are used for your child. At least 3 words are needed to make lessons.
@@ -156,22 +193,29 @@ function ExtractEditor({ data, onSaved }) {
         setPicking(null);
     }} />`)}
       <${Panel} title=${`🃏 Words (${ex.vocabulary.length})`} actions=${html`<${Button} onClick=${() => upd((e) => (e.vocabulary.push({ word: "", emoji: "⭐" }), e))}>+ Add word<//>`}>
-        ${choosePictures && (html`<div className="mb-3 flex flex-col gap-2 rounded-2xl bg-cream p-3 text-sm">
-            <p>
-              <b>Choose the picture your child sees</b> for each word:${hasDrawings && html` ✏️ the picture <b>Claude drew</b>,`} 📖 the <b>book's own picture</b>${pdf ? html` (📷 = choose it on the page)` : html` (add the book's PDF to see it)`} or 😀 the <b>emoji</b>. Then press 💾 Save.
-            </p>
-            <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Picture for all words">
-              <span className="font-bold">All words:</span>
-              ${hasDrawings && html`<${Button} onClick=${() => showAll("drawing")}>✏️ Drawings<//>`}
-              ${pdf && html`<${Button} onClick=${() => showAll("book")}>📖 Book pictures<//>`}
-              <${Button} onClick=${() => showAll("emoji")}>😀 Emoji<//>
-            </div>
-          </div>`)}
+        <div className="mb-3 flex flex-col gap-2 rounded-2xl bg-cream p-3 text-sm">
+          <p>
+            <b>Choose the picture your child sees</b> for each word: 🖼️ <b>your own picture</b> (⬆️ = add one from your device),${hasDrawings && html` ✏️ the picture <b>Claude drew</b>,`}${showBook && html` 📖 the <b>book's own picture</b>${pdf ? html` (📷 = choose it on the page)` : html` (add the book's PDF to see it)`},`} or 😀 the <b>emoji</b>. Then press 💾 Save.
+          </p>
+          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Picture for all words">
+            <span className="font-bold">All words:</span>
+            ${hasOwn && html`<${Button} onClick=${() => showAll("own")}>🖼️ Your pictures<//>`}
+            ${hasDrawings && html`<${Button} onClick=${() => showAll("drawing")}>✏️ Drawings<//>`}
+            ${pdf && html`<${Button} onClick=${() => showAll("book")}>📖 Book pictures<//>`}
+            <${Button} onClick=${() => showAll("emoji")}>😀 Emoji<//>
+          </div>
+          <input ref=${fileInput} type="file" accept="image/*" className="hidden" data-testid="own-picture-file" onChange=${(e) => {
+        const f = e.target.files?.[0];
+        e.target.value = "";
+        if (f && uploadFor.current !== null)
+            void addOwn(uploadFor.current, f);
+    }} />
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-left">
+          <table className="w-full min-w-[720px] text-left">
             <thead className="text-sm text-ink-soft">
               <tr>
-                ${choosePictures && html`<th className="p-1">Picture your child sees</th>`}
+                <th className="p-1">Picture your child sees</th>
                 <th className="p-1">Emoji</th>
                 <th className="p-1">Word</th>
                 <th className="p-1">Vietnamese (for you)</th>
@@ -186,14 +230,21 @@ function ExtractEditor({ data, onSaved }) {
         const own = !!v.pic;
         const pick = (kind) => upd((x) => ((x.vocabulary[k].show = kind), x));
         return (html`<tr key=${k} className="border-t border-line">
-                  ${choosePictures && html`<td className="p-1">
+                  <td className="p-1">
                       <div className="flex items-center gap-1" role="radiogroup" aria-label=${`Picture for ${w}`}>
+                        <${PictureChoice} label=${`Your picture of ${w}`} tag="🖼️" selected=${shown === "own"} title=${h.own ? "Your picture" : "Add your own picture"} onPick=${() => (h.own ? pick("own") : chooseFile(k))}>
+                          ${busyPic === k ? "⏳" : h.own ? html`<${ApiImg} src=${data.own[picKey(v.word)]} fallback=${v.emoji} alt=${v.word} title="Your picture" className="h-full w-full object-contain" />` : html`<span className="text-2xl text-ink-soft">＋</span>`}
+                        <//>
+                        <div className="flex flex-col gap-1">
+                          <button type="button" onClick=${() => chooseFile(k)} disabled=${busyPic !== null} aria-label=${`Upload your own picture for ${w}`} title=${h.own ? "Change your picture" : "Add your own picture (from your device)"} className="flex h-7 w-7 items-center justify-center rounded-lg border-2 border-line bg-paper text-sm hover:border-sun">⬆️</button>
+                          ${h.own && html`<button type="button" onClick=${() => void removeOwn(k)} aria-label=${`Remove your picture of ${w}`} title="Remove your picture" className="flex h-7 w-7 items-center justify-center rounded-lg border-2 border-line bg-paper text-sm hover:border-berry">✕</button>`}
+                        </div>
                         ${hasDrawings && html`<${PictureChoice} label=${`Claude's drawing of ${w}`} tag="✏️" selected=${shown === "drawing"} disabled=${!h.drawing} title=${h.drawing ? "Drawn by Claude" : "No drawing of this word"} onPick=${() => pick("drawing")}>
                             ${h.drawing ? html`<${ApiImg} src=${data.drawn[picKey(v.word)]} fallback=${v.emoji} alt=${v.word} title="Drawn by Claude" className="h-full w-full object-contain" />` : "—"}
                           <//>`}
-                        <${PictureChoice} label=${`The book's picture of ${w}`} tag="📖" selected=${shown === "book"} disabled=${!h.book} title=${h.book ? (own ? "Picture from the book" : "Picture from the book (as in an earlier unit)") : pdf ? "Press 📷 to choose the book's picture" : "Add the book's PDF to see the book's picture"} onPick=${() => pick("book")}>
+                        ${showBook && html`<${PictureChoice} label=${`The book's picture of ${w}`} tag="📖" selected=${shown === "book"} disabled=${!h.book} title=${h.book ? (own ? "Picture from the book" : "Picture from the book (as in an earlier unit)") : pdf ? "Press 📷 to choose the book's picture" : "Add the book's PDF to see the book's picture"} onPick=${() => pick("book")}>
                           ${h.book ? html`<${ApiImg} src=${cropUrl(book.id, bookPic(v), 160)} fallback="📖" alt=${v.word} className="h-full w-full object-contain" />` : "📖"}
-                        <//>
+                        <//>`}
                         <${PictureChoice} label=${`The emoji for ${w}`} tag="😀" selected=${shown === "emoji"} title="The emoji" onPick=${() => pick("emoji")}>
                           ${v.emoji || "⭐"}
                         <//>
@@ -201,7 +252,7 @@ function ExtractEditor({ data, onSaved }) {
                             📷
                           </button>`}
                       </div>
-                    </td>`}
+                    </td>
                   <td className="p-1">
                     <input aria-label="Emoji" className=${`${inputCls} w-20 text-center text-2xl`} value=${v.emoji ?? ""} onChange=${(e) => upd((x) => ((x.vocabulary[k].emoji = e.target.value), x))} />
                   </td>

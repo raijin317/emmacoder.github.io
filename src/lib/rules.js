@@ -41,7 +41,7 @@ export const DEFAULT_RULES = [
 /** What each built-in rule does (shown in the rules page). */
 export const RULE_EFFECT = {
     [RULE.bookOnly]: "Lessons are made only from the words, patterns and sentences typed in for the unit (earlier units' words appear as review choices).",
-    [RULE.bookPictures]: "The pictures Claude drew for the unit words (in a book package) replace the emoji in every activity, game and printout. A word without a drawing shows the picture cut from the book page when the book's PDF is added in this browser.",
+    [RULE.bookPictures]: "Each unit word shows the picture you chose for it in the unit's word list — your own picture, the picture Claude drew (book package), the book's own picture (when the book's PDF is added in this browser) or the emoji — in every activity, game and printout. Switched off: the emoji everywhere.",
     [RULE.bookReading]: "The Reading lesson shows the unit's reading text exactly as printed in the book.",
     [RULE.kidClear]: "Lessons use short instructions, a few choices and cheerful feedback.",
 };

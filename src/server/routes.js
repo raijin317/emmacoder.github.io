@@ -5,13 +5,13 @@
 import { z } from "zod";
 import { route, ok, fail, body, sse, blobResponse } from "./api.js";
 import {
-  checkPin, childStats, createItem, createTopic, deleteBook, deleteChild, deleteItem, deleteTopic, deleteUnit, exportAll, getAppSettings, getBook, getBookPicture, getChild,
+  checkPin, childStats, createItem, createTopic, deleteBook, deleteChild, deleteItem, deleteOwnPicture, deleteTopic, deleteUnit, exportAll, getAppSettings, getBook, getBookPicture, getChild, getOwnPicture, setOwnPicture,
   getItem, getLessonRules, getSetting, getTopic, getUnit, importAll, listBooks, listChildren, listItems, listTopics, listUnits, recordAttempt, saveChild,
   setActiveBook, setLessonRules, setPin, setSetting, topicChildren, updateItem, updateTopic, updateUnit, upsertBook, upsertUnit,
 } from "./repo.js";
 import { flushSave, migrateAgain, newId, saveNow, tx } from "./db.js";
 import { reassessBook, quickPackForUnit } from "./content.js";
-import { drawnMap, picturesForItem, unitCovers } from "./pictures.js";
+import { drawnMap, ownMap, picturesForItem, unitCovers } from "./pictures.js";
 import { wordPictures } from "@/lib/pictures.js";
 import { generateBookResources, generateUnitResources } from "./books/resources.js";
 import { bookIdFor, cropBlob, fileHash, gradeHintFromName, hasPages, pageBlob, removePages, renderPdfPages } from "./books/pages.js";
@@ -136,7 +136,7 @@ on("POST", "/api/books/import", async (req) => {
 on("GET", "/api/books/:bookId", async (_req, { bookId }) => {
   const book = getBook(bookId);
   if (!book) return fail("Book not found", 404);
-  return ok({ book: { ...book, hasPages: hasPages(bookId) }, units: listUnits(bookId), drawn: drawnMap(bookId) });
+  return ok({ book: { ...book, hasPages: hasPages(bookId) }, units: listUnits(bookId), drawn: drawnMap(bookId), own: ownMap(bookId) });
 });
 
 on("PATCH", "/api/books/:bookId", async (req, { bookId }) => {
@@ -193,6 +193,29 @@ on("GET", "/api/books/:bookId/pages/:page", async (req, { bookId, page }) => {
 on("GET", "/api/books/:bookId/drawn/:key", async (_req, { bookId, key }) => {
   const svg = getBookPicture(bookId, key);
   return svg ? blobResponse(new Blob([svg], { type: "image/svg+xml" })) : fail("No drawing", 404);
+});
+
+/** A picture the parent added for a word of the book. */
+on("GET", "/api/books/:bookId/own/:key", async (_req, { bookId, key }) => {
+  const p = getOwnPicture(bookId, key);
+  return p ? blobResponse(new Blob([Uint8Array.from(atob(p.data), (c) => c.charCodeAt(0))], { type: p.mime })) : fail("No picture", 404);
+});
+
+/** Adds / replaces the parent's picture of a word: { image: "data:image/webp;base64,…" } (made small in the page). */
+on("PUT", "/api/books/:bookId/own/:key", async (req, { bookId, key }) => {
+  if (!getBook(bookId)) return fail("Book not found", 404);
+  const k = String(key).trim();
+  if (!k || k.length > 80) return fail("Please type the word first.");
+  const m = /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/=]+)$/.exec(String((await body(req)).image ?? ""));
+  if (!m) return fail("Please choose a picture (PNG, JPG, WEBP or GIF).");
+  if (m[2].length > 1_500_000) return fail("This picture is too big — please choose a smaller one.");
+  setOwnPicture(bookId, k, m[1], m[2]);
+  return ok({ own: ownMap(bookId) });
+});
+
+on("DELETE", "/api/books/:bookId/own/:key", async (_req, { bookId, key }) => {
+  deleteOwnPicture(bookId, String(key));
+  return ok({ own: ownMap(bookId) });
 });
 
 on("GET", "/api/books/:bookId/crop", async (req, { bookId }) => {
@@ -472,7 +495,7 @@ on("GET", "/api/units/:unitId", async (_req, { unitId }) => {
   const book = getBook(unit.bookId);
   // The book pictures and choices of this unit's words in earlier units (used when a word here has none).
   const earlier = wordPictures(all.filter((u) => u.order < unit.order).reverse().map((u) => u.extract));
-  return ok({ unit, book: book && { ...book, hasPages: hasPages(book.id) }, items: listItems({ unitId }), siblings, drawn: drawnMap(unit.bookId), earlier: { pic: Object.fromEntries(earlier.pic), show: Object.fromEntries(earlier.show) } });
+  return ok({ unit, book: book && { ...book, hasPages: hasPages(book.id) }, items: listItems({ unitId }), siblings, drawn: drawnMap(unit.bookId), own: ownMap(unit.bookId), earlier: { pic: Object.fromEntries(earlier.pic), show: Object.fromEntries(earlier.show) } });
 });
 
 on("PATCH", "/api/units/:unitId", async (req, { unitId }) => {

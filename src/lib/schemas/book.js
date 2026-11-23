@@ -52,10 +52,11 @@ export const UnitExtractCore = z.object({
         /** The book's picture of this word (optional; a bad box is dropped, not fatal). */
         pic: BookPicture.optional().catch(undefined),
         /**
-         * Which picture the child sees (chosen by the parent in the unit's word list): Claude's drawing,
-         * the book's own picture, or the emoji. Not set = the drawing, else the book picture, else the emoji.
+         * Which picture the child sees (chosen by the parent in the unit's word list): the parent's own picture,
+         * Claude's drawing, the book's own picture, or the emoji. Not set = the parent's picture, else the drawing,
+         * else the book picture, else the emoji.
          */
-        show: z.enum(["drawing", "book", "emoji"]).optional().catch(undefined),
+        show: z.enum(["own", "drawing", "book", "emoji"]).optional().catch(undefined),
     }))
         .default([]),
     patterns: z

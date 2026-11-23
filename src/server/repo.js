@@ -110,6 +110,7 @@ export function deleteBook(id) {
         db().prepare("DELETE FROM content_items WHERE book_id = ?").run(id);
         db().prepare("DELETE FROM units WHERE book_id = ?").run(id);
         db().prepare("DELETE FROM book_pictures WHERE book_id = ?").run(id);
+        db().prepare("DELETE FROM own_pictures WHERE book_id = ?").run(id);
         db().prepare("DELETE FROM books WHERE id = ?").run(id);
     });
 }
@@ -127,6 +128,23 @@ export function setBookPictures(bookId, pictures) {
     db().prepare("DELETE FROM book_pictures WHERE book_id = ?").run(bookId);
     for (const [key, p] of Object.entries(pictures))
         db().prepare("INSERT INTO book_pictures(book_id, word_key, svg, version) VALUES(?,?,?,?)").run(bookId, key, p.svg, p.version);
+}
+/* -------------------- the parent's own pictures for words -------------------- */
+/** The words of a book that have a picture the parent added: picKey(word) → version. */
+export function ownPictureKeys(bookId) {
+    return new Map(db().prepare("SELECT word_key, version FROM own_pictures WHERE book_id = ?").all(bookId).map((r) => [String(r.word_key), String(r.version)]));
+}
+export function getOwnPicture(bookId, key) {
+    const r = db().prepare("SELECT mime, data FROM own_pictures WHERE book_id = ? AND word_key = ?").get(bookId, key);
+    return r ? { mime: String(r.mime), data: String(r.data) } : null;
+}
+/** Adds or replaces the parent's picture of a word (data = base64). */
+export function setOwnPicture(bookId, key, mime, data) {
+    db().prepare(`INSERT INTO own_pictures(book_id, word_key, mime, data, version) VALUES(?,?,?,?,?)
+       ON CONFLICT(book_id, word_key) DO UPDATE SET mime=excluded.mime, data=excluded.data, version=excluded.version`).run(bookId, key, mime, data, Date.now().toString(36));
+}
+export function deleteOwnPicture(bookId, key) {
+    db().prepare("DELETE FROM own_pictures WHERE book_id = ? AND word_key = ?").run(bookId, key);
 }
 /* --------------------------------- units -------------------------------- */
 /** Units saved before sentences/readings existed get empty lists. */
@@ -468,7 +486,7 @@ export function addMessage(threadId, role, text, pack = null, files = []) {
     updateThread(threadId, {});
 }
 /* --------------------------------- backup -------------------------------- */
-const BACKUP_TABLES = ["settings", "books", "units", "book_pictures", "inspiration_topics", "content_items", "children", "attempts", "stickers", "chat_threads", "chat_messages"];
+const BACKUP_TABLES = ["settings", "books", "units", "book_pictures", "own_pictures", "inspiration_topics", "content_items", "children", "attempts", "stickers", "chat_threads", "chat_messages"];
 export function exportAll() {
     const out = {};
     for (const t of BACKUP_TABLES)

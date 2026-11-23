@@ -14,13 +14,17 @@ export function cropUrl(bookId, pic, size = 400) {
 export function drawnUrl(bookId, key, version = "") {
     return `/api/books/${bookId}/drawn/${encodeURIComponent(key)}${version ? `?v=${encodeURIComponent(version)}` : ""}`;
 }
-/** The three pictures a word can have, in the order used when the parent has not chosen one. */
-export const PICTURE_KINDS = ["drawing", "book", "emoji"];
+/** A picture the parent added for a word of the book (unit page → "Picture your child sees"). */
+export function ownUrl(bookId, key, version = "") {
+    return `/api/books/${bookId}/own/${encodeURIComponent(key)}${version ? `?v=${encodeURIComponent(version)}` : ""}`;
+}
+/** The pictures a word can have, in the order used when the parent has not chosen one. */
+export const PICTURE_KINDS = ["own", "drawing", "book", "emoji"];
 /**
  * Which picture the child sees for a word: the parent's choice (v.show) when that picture is there,
- * otherwise Claude's drawing, then the book's own picture, then the emoji.
- * has.drawing: the book has a drawing of the word; has.book: the word's book picture can be shown
- * (a box is set and the PDF's pages are in this browser).
+ * otherwise the parent's own picture, then Claude's drawing, then the book's own picture, then the emoji.
+ * has.own: the parent added a picture of the word; has.drawing: the book has a drawing of the word;
+ * has.book: the word's book picture can be shown (a box is set and the PDF's pages are in this browser).
  */
 export function pictureKind(v, has) {
     const order = v.show ? [v.show, ...PICTURE_KINDS] : PICTURE_KINDS;
@@ -28,7 +32,7 @@ export function pictureKind(v, has) {
 }
 /**
  * Map of word → picture URL (plus emoji → URL when an emoji belongs to one word only).
- * o.drawn: the book's drawings (picKey → version); o.crops: pictures cut from the book pages can be
+ * o.own: the parent's pictures (picKey → version); o.drawn: the book's drawings (picKey → version); o.crops: pictures cut from the book pages can be
  * shown (only when the PDF's pages are in this browser). Each word shows the picture chosen for it
  * (pictureKind); the first unit that has the word decides. A word met again (review units) without its
  * own book picture or choice uses the ones it has in the other units.
@@ -77,7 +81,10 @@ export function wordPictures(units) {
 export function pictureUrl(bookId, v, o = { crops: true }, size = 400) {
     const k = picKey(v.word);
     const version = o.drawn?.get(k);
-    const kind = pictureKind(v, { drawing: version !== undefined, book: !!v.pic && o.crops !== false });
+    const own = o.own?.get(k);
+    const kind = pictureKind(v, { own: own !== undefined, drawing: version !== undefined, book: !!v.pic && o.crops !== false });
+    if (kind === "own")
+        return ownUrl(bookId, k, own);
     if (kind === "drawing")
         return drawnUrl(bookId, k, version);
     if (kind === "book")
