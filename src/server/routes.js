@@ -5,13 +5,13 @@
 import { z } from "zod";
 import { route, ok, fail, body, sse, blobResponse } from "./api.js";
 import {
-  checkPin, childStats, createItem, createTopic, deleteBook, deleteChild, deleteItem, deleteTopic, deleteUnit, exportAll, getAppSettings, getBook, getChild,
+  checkPin, childStats, createItem, createTopic, deleteBook, deleteChild, deleteItem, deleteTopic, deleteUnit, exportAll, getAppSettings, getBook, getBookPicture, getChild,
   getItem, getLessonRules, getSetting, getTopic, getUnit, importAll, listBooks, listChildren, listItems, listTopics, listUnits, recordAttempt, saveChild,
   setActiveBook, setLessonRules, setPin, setSetting, topicChildren, updateItem, updateTopic, updateUnit, upsertBook, upsertUnit,
 } from "./repo.js";
 import { flushSave, migrateAgain, newId, saveNow, tx } from "./db.js";
 import { reassessBook, quickPackForUnit } from "./content.js";
-import { picturesForItem, unitCovers } from "./pictures.js";
+import { drawnMap, picturesForItem, unitCovers } from "./pictures.js";
 import { generateBookResources, generateUnitResources } from "./books/resources.js";
 import { bookIdFor, cropBlob, fileHash, gradeHintFromName, hasPages, pageBlob, removePages, renderPdfPages } from "./books/pages.js";
 import { buildTopicItems, topicGames } from "./topics.js";
@@ -135,7 +135,7 @@ on("POST", "/api/books/import", async (req) => {
 on("GET", "/api/books/:bookId", async (_req, { bookId }) => {
   const book = getBook(bookId);
   if (!book) return fail("Book not found", 404);
-  return ok({ book: { ...book, hasPages: hasPages(bookId) }, units: listUnits(bookId) });
+  return ok({ book: { ...book, hasPages: hasPages(bookId) }, units: listUnits(bookId), drawn: drawnMap(bookId) });
 });
 
 on("PATCH", "/api/books/:bookId", async (req, { bookId }) => {
@@ -186,6 +186,12 @@ on("GET", "/api/books/:bookId/pages/:page", async (req, { bookId, page }) => {
   const thumb = new URL(req.url, location.href).searchParams.get("thumb") === "1";
   const blob = await pageBlob(bookId, n, thumb);
   return blob ? blobResponse(blob) : fail("Page not rendered", 404);
+});
+
+/** A picture Claude drew for a word of the book (lesson rule 2). */
+on("GET", "/api/books/:bookId/drawn/:key", async (_req, { bookId, key }) => {
+  const svg = getBookPicture(bookId, key);
+  return svg ? blobResponse(new Blob([svg], { type: "image/svg+xml" })) : fail("No drawing", 404);
 });
 
 on("GET", "/api/books/:bookId/crop", async (req, { bookId }) => {
@@ -462,7 +468,7 @@ on("GET", "/api/units/:unitId", async (_req, { unitId }) => {
   if (!unit) return fail("Unit not found", 404);
   const siblings = listUnits(unit.bookId).map((u) => ({ id: u.id, order: u.order, title: u.title }));
   const book = getBook(unit.bookId);
-  return ok({ unit, book: book && { ...book, hasPages: hasPages(book.id) }, items: listItems({ unitId }), siblings });
+  return ok({ unit, book: book && { ...book, hasPages: hasPages(book.id) }, items: listItems({ unitId }), siblings, drawn: drawnMap(unit.bookId) });
 });
 
 on("PATCH", "/api/units/:unitId", async (req, { unitId }) => {

@@ -10,7 +10,8 @@ import { z } from "zod";
 import { assessBook, PROFILES } from "@/lib/assessment.js";
 import { BookPackage, CLAUDE_TYPES, LOCAL_TYPES, packageUnitId } from "@/lib/schemas/package.js";
 import { UnitExtract } from "@/lib/schemas/book.js";
-import { createItem, deleteItem, getBook, getItem, getLessonRules, getSetting, getUnit, listItems, listUnits, setSetting, upsertBook, upsertUnit } from "../repo.js";
+import { createItem, deleteItem, getBook, getItem, getLessonRules, getSetting, getUnit, listItems, listUnits, setBookPictures, setSetting, upsertBook, upsertUnit } from "../repo.js";
+import { normalizeSvg } from "@/lib/safeSvg.js";
 import { earlierLanguage, enforceRules, offlineItemsForUnit } from "../content.js";
 import { JobError } from "../api.js";
 import { sha256Hex } from "../sha256.js";
@@ -90,6 +91,16 @@ export function importBookPackage(raw, opts = {}) {
             setSetting(key.unit(id), hashOf(getUnit(id).extract));
         }
     });
+
+    // 1b. The pictures Claude drew for the words (lesson rule 2) — shown instead of the emoji.
+    const pictures = Object.fromEntries(Object.entries(pkg.pictures).map(([key, svg]) => {
+        const clean = normalizeSvg(svg);
+        return [key, { svg: clean, version: sha256Hex(clean).slice(0, 10) }];
+    }));
+    setBookPictures(b.id, pictures);
+    report.pictures = Object.keys(pictures).length;
+    if (report.pictures)
+        log(`${report.pictures} pictures drawn for the words.`);
 
     // 2. Level & age from the book's content (decides how the lessons are pitched).
     const all = listUnits(b.id);

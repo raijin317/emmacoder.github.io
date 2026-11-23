@@ -10,7 +10,7 @@ import { STAGE_INFO } from "@/lib/assessment.js";
 import { AssessmentBadges, BookCover, LocalDataBadge, STATUS_BADGE, useJob } from "./common.js";
 import { PrepareVoices } from "./settings.js";
 import { RulesNote } from "./rules.js";
-import { cropUrl } from "@/lib/pictures.js";
+import { cropUrl, picKey } from "@/lib/pictures.js";
 /* ------------------------------ Import panel ------------------------------ */
 export function JobLog({ job }) {
     if (!job.running && !job.log.length)
@@ -383,7 +383,7 @@ export function BookDetail({ bookId }) {
               <span className="flex h-10 w-10 items-center justify-center rounded-full bg-sun font-display text-xl font-bold">${u.order}</span>
               <div className="min-w-0 flex-1">
                 <p className="flex items-center gap-1 font-bold">
-                  ${u.extract.vocabulary.slice(0, 3).map((v, k) => v.pic && book.hasPages ? (
+                  ${u.extract.vocabulary.slice(0, 3).map((v, k) => data.drawn?.[picKey(v.word)] ? html`<${ApiImg} key=${k} src=${data.drawn[picKey(v.word)]} fallback=${v.emoji} alt=${v.word} title="Drawn by Claude" className="h-8 w-8 rounded-md border border-line bg-white object-contain" />` : v.pic && book.hasPages ? (
     // eslint-disable-next-line @next/next/no-img-element
     html`<${ApiImg} key=${k} src=${cropUrl(book.id, v.pic, 160)} alt=${v.word} className="h-8 w-8 rounded-md border border-line bg-white object-contain" />`) : (html`<span key=${k}>${v.emoji}</span>`))}${" "}
                   ${u.title}

@@ -101,6 +101,15 @@ CREATE TABLE IF NOT EXISTS stickers (
   earned_at TEXT NOT NULL
 );
 
+-- Pictures Claude drew for a book's words (book packages, lesson rule 2): picKey(word) → SVG.
+CREATE TABLE IF NOT EXISTS book_pictures (
+  book_id TEXT NOT NULL,
+  word_key TEXT NOT NULL,
+  svg TEXT NOT NULL,
+  version TEXT NOT NULL,
+  PRIMARY KEY (book_id, word_key)
+);
+
 CREATE TABLE IF NOT EXISTS chat_threads (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,

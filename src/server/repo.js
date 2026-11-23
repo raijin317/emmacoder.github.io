@@ -109,8 +109,24 @@ export function deleteBook(id) {
             saveChild({ ...c, bookIds: c.bookIds.filter((b) => b !== id) });
         db().prepare("DELETE FROM content_items WHERE book_id = ?").run(id);
         db().prepare("DELETE FROM units WHERE book_id = ?").run(id);
+        db().prepare("DELETE FROM book_pictures WHERE book_id = ?").run(id);
         db().prepare("DELETE FROM books WHERE id = ?").run(id);
     });
+}
+/* ------------------------- drawn pictures (lesson rule 2) ------------------------ */
+/** The words of a book that have a drawing: picKey(word) → version (changes when the drawing changes). */
+export function bookPictureKeys(bookId) {
+    return new Map(db().prepare("SELECT word_key, version FROM book_pictures WHERE book_id = ?").all(bookId).map((r) => [String(r.word_key), String(r.version)]));
+}
+export function getBookPicture(bookId, key) {
+    const r = db().prepare("SELECT svg FROM book_pictures WHERE book_id = ? AND word_key = ?").get(bookId, key);
+    return r ? String(r.svg) : null;
+}
+/** Replaces all drawings of a book. */
+export function setBookPictures(bookId, pictures) {
+    db().prepare("DELETE FROM book_pictures WHERE book_id = ?").run(bookId);
+    for (const [key, p] of Object.entries(pictures))
+        db().prepare("INSERT INTO book_pictures(book_id, word_key, svg, version) VALUES(?,?,?,?)").run(bookId, key, p.svg, p.version);
 }
 /* --------------------------------- units -------------------------------- */
 /** Units saved before sentences/readings existed get empty lists. */
@@ -452,7 +468,7 @@ export function addMessage(threadId, role, text, pack = null, files = []) {
     updateThread(threadId, {});
 }
 /* --------------------------------- backup -------------------------------- */
-const BACKUP_TABLES = ["settings", "books", "units", "inspiration_topics", "content_items", "children", "attempts", "stickers", "chat_threads", "chat_messages"];
+const BACKUP_TABLES = ["settings", "books", "units", "book_pictures", "inspiration_topics", "content_items", "children", "attempts", "stickers", "chat_threads", "chat_messages"];
 export function exportAll() {
     const out = {};
     for (const t of BACKUP_TABLES)

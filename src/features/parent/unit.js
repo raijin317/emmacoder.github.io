@@ -13,7 +13,7 @@ import { JobLog, PageModal } from "./books.js";
 import { useJob } from "./common.js";
 import { PicturePicker } from "./picker.js";
 import { RulesNote } from "./rules.js";
-import { cropUrl } from "@/lib/pictures.js";
+import { cropUrl, picKey } from "@/lib/pictures.js";
 import { bookTexts } from "@/lib/bookText.js";
 export function UnitWorkspace({ unitId }) {
     const { data, error, reload } = useApi(`/api/units/${unitId}`);
@@ -89,6 +89,8 @@ function ExtractEditor({ data, onSaved }) {
             setMsg(`${err.message} ${err.details ?? ""}`);
         }
     };
+    // Pictures Claude drew for the book's words (book package, lesson rule 2).
+    const hasDrawings = Object.keys(data.drawn ?? {}).length > 0;
     const pages = book.isDemo || !book.hasPages ? [] : Array.from({ length: Math.max(0, Math.min(unit.pages[1], book.pageCount || unit.pages[1]) - unit.pages[0] + 1) }, (_, k) => unit.pages[0] + k);
     return (html`<div className="flex flex-col gap-6">
       ${unit.status !== "approved" && (html`<div className="rounded-2xl bg-orange-soft p-4">
@@ -147,13 +149,14 @@ function ExtractEditor({ data, onSaved }) {
         setPicking(null);
     }} />`)}
       <${Panel} title=${`🃏 Words (${ex.vocabulary.length})`} actions=${html`<${Button} onClick=${() => upd((e) => (e.vocabulary.push({ word: "", emoji: "⭐" }), e))}>+ Add word<//>`}>
-        ${pages.length > 0 && (html`<p className="mb-2 text-sm text-ink-soft">
-            The child sees the <b>book's own picture</b> of each word. Click a picture (or 📷) to choose it on the page; the emoji is used only when there is no book picture.
+        ${(hasDrawings || pages.length > 0) && (html`<p className="mb-2 text-sm text-ink-soft">
+            ${hasDrawings && html`The child sees the <b>picture Claude drew</b> for each word (like the book's picture). `}${pages.length > 0 && html`${hasDrawings ? "Words without a drawing show the" : "The child sees the"} <b>book's own picture</b> — click a picture (or 📷) to choose it on the page. `}The emoji is used only when there is no picture.
           </p>`)}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-left">
             <thead className="text-sm text-ink-soft">
               <tr>
+                ${hasDrawings && html`<th className="p-1">Drawing</th>`}
                 <th className="p-1">Book picture</th>
                 <th className="p-1">Emoji</th>
                 <th className="p-1">Word</th>
@@ -163,6 +166,9 @@ function ExtractEditor({ data, onSaved }) {
             </thead>
             <tbody>
               ${ex.vocabulary.map((v, k) => (html`<tr key=${k} className="border-t border-line">
+                  ${hasDrawings && html`<td className="p-1">
+                      ${data.drawn[picKey(v.word)] ? html`<${ApiImg} src=${data.drawn[picKey(v.word)]} fallback=${v.emoji} alt=${v.word} title="Drawn by Claude" className="h-16 w-16 rounded-xl border-2 border-line bg-white object-contain" />` : html`<span className="text-sm text-ink-soft">—</span>`}
+                    </td>`}
                   <td className="p-1">
                     ${pages.length > 0 ? (html`<button type="button" onClick=${() => setPicking(k)} aria-label=${`Choose the book picture for ${v.word || "this word"}`} className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-line bg-paper text-2xl hover:border-sun">
                         ${v.pic ? html`<${ApiImg} src=${cropUrl(book.id, v.pic, 160)} fallback="📷" alt=${v.word} className="h-full w-full object-contain" />` : "📷"}

@@ -34,7 +34,7 @@ Chuyển dữ liệu từ bản desktop: ở app cũ vào Settings → Export ba
 
 ## Nhập sách bằng Claude (Import_Book.md)
 
-Muốn có bộ bài học đầy đủ như tính năng "Import Book" của bản desktop: đặt PDF vào `resources/book/` (không bao giờ được đưa lên GitHub) và nói với Claude *"Đọc Import_Book.md và import sách `resources/book/<tên file>.pdf`"*. Claude đọc sách, viết từng unit và các bài học, rồi tạo **gói sách** `content/books/<bookId>.json`:
+Muốn có bộ bài học đầy đủ như tính năng "Import Book" của bản desktop: đặt PDF vào `resources/book/` (không bao giờ được đưa lên GitHub) và nói với Claude *"Đọc Import_Book.md và import sách `resources/book/<tên file>.pdf`"*. Claude đọc sách, **vẽ hình cho từng từ** (giống hình trong sách, hiện cho bé mà không cần PDF), viết từng unit và các bài học theo 4 quy tắc bài học, rồi tạo **gói sách** `content/books/<bookId>.json`:
 
 - Gói trong `content/books/` (liệt kê ở `content/books/index.json`) được web **tự nạp** khi mở — push lên GitHub là mọi trình duyệt đều có sách đó. Gói có phiên bản mới thì được nạp lại, nhưng phần phụ huynh đã sửa được giữ nguyên.
 - Muốn **riêng tư** thì nói thêm "giữ riêng tư": gói nằm ở `resources/packages/` và bạn tự nhập bằng **Parent → Books → 📦 Import a book package**.

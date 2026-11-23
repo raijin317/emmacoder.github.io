@@ -2,6 +2,7 @@
 // Book packages (see Import_Book.md): helpers for making and checking them with the site's own schemas and rules.
 //
 //   node tools/book-package.mjs id <book.pdf>              book id (as the app makes it) + page count
+//   node tools/book-package.mjs pictures <workDir>         sheet: book picture | Claude's drawing for every word (rule 2 self-check)
 //   node tools/book-package.mjs assemble <workDir> [--out <file>] [-v]
 //                                                          work folder → package (content/books/<id>.json by default) + check + index
 //   node tools/book-package.mjs check <package.json> [-v]  validate; level; lessons per unit; what the rules would drop
@@ -91,6 +92,104 @@ function sentencesOf(item) {
 }
 const wordsIn = (s) => s.replace(/_+/g, " x ").split(/\s+/).filter((w) => /[a-z]/i.test(w)).length;
 
+/* ---------------- rule 1: every sentence the child hears or reads comes from the book ---------------- */
+
+const GAP = "gapslot";
+const norm = (s) => s.toLowerCase().replace(/[’‘]/g, "'").replace(/_{2,}/g, ` ${GAP} `).replace(/[^a-z0-9'\s]/g, " ").replace(/\s+/g, " ").trim();
+/** A text cut into sentences / lines, normalized. */
+const pieces = (s) => s.split(/\n+|(?<=[.!?])\s+/).map(norm).filter(Boolean);
+/** Short standard instructions of the app (allowed everywhere, rule 4). */
+const INSTRUCTIONS = new Set(["what is it", "what is this", "which picture", "which one", "listen and tap the right picture", "listen and choose", "put the words in order", "match the pictures and the words", "find the picture"]);
+
+/** The book's language up to a unit (this unit + earlier units). */
+class BookLanguage {
+  lines = [];
+  patterns = [];
+  words = new Set();
+  vocab = new Set();
+  add(u) {
+    const texts = [...u.sentences, ...u.readings.map((r) => r.text), ...u.patterns.map((p) => p.text), ...u.vocabulary.map((v) => v.word)];
+    for (const t of texts) for (const p of pieces(t)) {
+      if (p.includes(GAP)) this.patterns.push(new RegExp(`^${p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(new RegExp(GAP, "g"), "([a-z0-9' ]+?)")}$`));
+      else this.lines.push(p);
+      p.split(" ").forEach((w) => w !== GAP && this.words.add(w));
+    }
+    for (const v of u.vocabulary) for (const w of norm(v.word).split(" ")) this.vocab.add(w).add(w + "s").add(w + "es");
+    this.corpus = ` ${this.lines.join(" | ")} `;
+  }
+  /** True when this sentence (or line) is printed in the book, a book pattern filled with book words, or a book sentence with one unit word swapped. */
+  has(sentence) {
+    const s = norm(sentence);
+    if (!s || INSTRUCTIONS.has(s)) return true;
+    if (this.corpus.includes(` ${s} `)) return true;
+    for (const re of this.patterns) {
+      const m = re.exec(s);
+      if (m && m.slice(1).every((g) => g.trim().split(" ").every((w) => this.words.has(w)))) return true;
+    }
+    const t = s.split(" ");
+    return this.lines.some((line) => {
+      for (const part of line.split(" | ")) {
+        const o = part.split(" ");
+        if (o.length !== t.length) continue;
+        const diff = o.map((w, i) => [w, t[i]]).filter(([a, b]) => a !== b);
+        if (diff.length === 1 && this.vocab.has(diff[0][0]) && this.vocab.has(diff[0][1])) return true;
+      }
+      return false;
+    });
+  }
+}
+
+/** Everything a lesson lets the child hear or read, with where it is (for the rule 1 check). */
+function childLines(item) {
+  const d = item.data;
+  const out = [];
+  const add = (text, where) => text && out.push({ text, where });
+  const q = (x, where) => {
+    if (x.kind === "tf") add(x.statement, where);
+    if (x.kind === "fill") add(x.sentence.replace(/_{2,}/, x.answer), where);
+    if (x.kind === "order") add(x.words.join(" "), where);
+    if (x.kind === "mc") add(/_{2,}/.test(x.prompt) ? x.prompt.replace(/_{2,}/, x.answer) : x.prompt, where);
+    if (x.kind === "picture" && !/^find (the )?[a-z' -]+\.?$/i.test(x.prompt.trim())) add(x.prompt, where);
+  };
+  switch (item.type) {
+    case "grammar":
+      d.examples.forEach((e) => add(e.text, "example"));
+      d.practice.forEach((x) => q(x, "practice"));
+      break;
+    case "reading":
+      d.questions.forEach((x) => q(x, "question"));
+      break;
+    case "listening":
+      d.tasks.forEach((t) => add(t.say, "listening"));
+      break;
+    case "speaking":
+      d.prompts.forEach((p) => (add(p.text, "speaking"), add(p.question, "speaking question")));
+      break;
+    case "quiz":
+      d.questions.forEach((x) => q(x, "quiz"));
+      break;
+    case "test":
+      d.sections.forEach((s) => s.questions.forEach((x) => q(x, "test")));
+      break;
+  }
+  return out;
+}
+
+/** Choices and instructions (rule 4). */
+function questionsOf(item) {
+  const d = item.data;
+  if (item.type === "quiz") return d.questions;
+  if (item.type === "test") return d.sections.flatMap((s) => s.questions);
+  if (item.type === "grammar") return d.practice;
+  if (item.type === "reading") return d.questions;
+  return [];
+}
+
+/* ------------------------------ rule 2: the pictures Claude drew ------------------------------ */
+
+/** File name of a word's drawing in the work folder: pictures/<picKey with dashes>.svg */
+const pictureFile = (word) => `${picKey(word).replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "word"}.svg`;
+
 function check(file, verbose) {
   let raw;
   try {
@@ -118,14 +217,22 @@ function check(file, verbose) {
     if (path.resolve(path.dirname(file)) === path.resolve(BOOKS)) warn("content/books/index.json does not list this version yet — run: node tools/book-package.mjs index");
   }
   const seenWords = [];
+  const book = new BookLanguage();
+  const drawn = new Set(Object.keys(pkg.pictures));
+  const allKeys = new Set(units.flatMap((u) => u.vocabulary.map((v) => picKey(v.word))));
+  console.log(`   Pictures drawn by Claude (rule 2): ${[...allKeys].filter((k) => drawn.has(k)).length}/${allKeys.size} words`);
+  for (const k of drawn) if (!allKeys.has(k)) warn(`a drawing for “${k}”, which is not a word of any unit (it is never shown)`);
   for (const u of units) {
     const words = u.vocabulary.filter((v) => v.word.trim());
     const slot = u.patterns.filter((x) => (x.text.match(/_{2,}/g) ?? []).length === 1);
     const texts = bookTexts(u);
+    book.add(u);
     console.log(`\n▶ Unit ${u.order}: ${u.title}  (pages ${u.pages[0]}–${u.pages[1]})`);
-    console.log(`   ${words.length} words (${words.filter((v) => v.pic).length} with a book picture), ${u.patterns.length} patterns (${slot.length} with one ___), ${u.sentences.length} sentences, ${u.readings.length} reading texts, confidence ${u.confidence}`);
+    console.log(`   ${words.length} words (${words.filter((v) => drawn.has(picKey(v.word))).length} drawn, ${words.filter((v) => v.pic).length} with a book picture box), ${u.patterns.length} patterns (${slot.length} with one ___), ${u.sentences.length} sentences, ${u.readings.length} reading texts, confidence ${u.confidence}`);
     if (words.length < 3) err("fewer than 3 words — the app can't make lessons for this unit");
     for (const v of words) if (!v.emoji?.trim()) warn(`“${v.word}” has no emoji`);
+    const undrawn = words.filter((v) => !drawn.has(picKey(v.word))).map((v) => v.word);
+    if (undrawn.length) warn(`rule 2: no drawing for ${undrawn.map((w) => `“${w}”`).join(", ")} — draw pictures/${pictureFile(undrawn[0])}${undrawn.length > 1 ? " …" : ""}`);
     if (u.confidence < 0.6) warn(`low confidence${u.notes ? `: ${u.notes}` : ""}`);
     const byType = Object.fromEntries(CLAUDE_TYPES.map((t) => [t, u.items.filter((i) => i.type === t).length]));
     console.log(`   written lessons: ${CLAUDE_TYPES.map((t) => `${t} ${byType[t]}`).join(", ")}`);
@@ -147,6 +254,19 @@ function check(file, verbose) {
         if (want && we.emoji !== want) warn(`“${it.title}”: “${we.word}” uses ${we.emoji} — the unit word has ${want} (use the same emoji so the book picture shows)`);
       }
       for (const s of sentencesOf(it)) if (wordsIn(s) > p.maxSentenceWords + 2) warn(`“${it.title}”: “${s}” has ${wordsIn(s)} words (level max ${p.maxSentenceWords})`);
+      // Rule 1: nothing the child hears or reads is invented.
+      for (const line of childLines(it))
+        for (const piece of line.text.split(/\n+|(?<=[.!?])\s+/))
+          if (!book.has(piece)) err(`rule 1: “${piece}” (${it.title}, ${line.where}) is not in the book — use a book sentence, or a book pattern filled with a book word`);
+      // Rule 4: few choices, very short instructions, short explanations.
+      const maxChoices = p.allowReadingInstructions ? 4 : 3;
+      for (const x of questionsOf(it)) {
+        const n = x.options?.length ?? x.pairs?.length ?? 0;
+        if ((x.kind === "picture" || x.kind === "mc" || x.kind === "fill") && n > maxChoices) warn(`rule 4: “${it.title}” has a question with ${n} choices (at this level: ${maxChoices} at most)`);
+        if (x.kind === "picture" && wordsIn(x.prompt) > 6) warn(`rule 4: “${it.title}”: the instruction “${x.prompt}” is long (6 words at most)`);
+      }
+      if (it.type === "listening") for (const t of it.data.tasks) if (t.options.length > maxChoices) warn(`rule 4: “${it.title}”: ${t.options.length} pictures to choose from (at this level: ${maxChoices} at most)`);
+      if (it.type === "grammar" && (pieces(it.data.explanation).length > 2 || wordsIn(it.data.explanation) > 25)) warn(`rule 4: “${it.title}”: the explanation is long (2 short sentences at most)`);
       if (verbose) console.log(`     · ${it.type}: ${it.title}`);
     }
     if (verbose) console.log(`     + made by the app: ${LOCAL_TYPES.join(", ")}${CLAUDE_TYPES.filter((t) => !kept.some((i) => i.type === t)).length ? `, ${CLAUDE_TYPES.filter((t) => !kept.some((i) => i.type === t)).join(", ")} (offline)` : ""}`);
@@ -177,8 +297,15 @@ function assemble(dir, out) {
     return { ...u, items: Array.isArray(lessons) ? lessons : (lessons.items ?? []) };
   });
   units.sort((a, b) => a.order - b.order);
+  // Rule 2: the drawings in pictures/<word>.svg, one per word of the book.
+  const pictures = {};
+  for (const u of units)
+    for (const v of u.vocabulary) {
+      const f = path.join(dir, "pictures", pictureFile(v.word));
+      if (fs.existsSync(f)) pictures[picKey(v.word)] ??= fs.readFileSync(f, "utf8").trim();
+    }
   const target = out ?? path.join(BOOKS, `${head.book.id}.json`);
-  const body = { format: PACKAGE_FORMAT, version: 1, book: head.book, units, ...(head.notes ? { notes: head.notes } : {}) };
+  const body = { format: PACKAGE_FORMAT, version: 1, book: head.book, units, pictures, ...(head.notes ? { notes: head.notes } : {}) };
   if (fs.existsSync(target)) {
     const prev = read(target);
     const same = JSON.stringify({ ...prev, version: 1, generatedAt: undefined, generatedBy: undefined }) === JSON.stringify({ ...body, generatedAt: undefined, generatedBy: undefined });
@@ -187,8 +314,91 @@ function assemble(dir, out) {
   const pkg = { ...body, generatedBy: "Claude (Import_Book.md)", generatedAt: new Date().toISOString() };
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, JSON.stringify(pkg, null, 1) + "\n");
-  console.log(`wrote ${path.relative(ROOT, target)} (version ${pkg.version}, ${units.length} units)\n`);
+  console.log(`wrote ${path.relative(ROOT, target)} (version ${pkg.version}, ${units.length} units, ${Object.keys(pictures).length} drawings)\n`);
   return target;
+}
+
+/**
+ * Rule 2 self-check: one sheet with, for every word of the book, the book's own picture (cut from the page
+ * images, when the unit has a box) next to Claude's drawing — to look at and redraw the weak ones.
+ * Writes <workDir>/pictures-sheet.png (and -2, -3 … when there are many words).
+ */
+async function pictureSheet(dir) {
+  const { createRequire } = await import("node:module");
+  const require = createRequire(path.join(ROOT, "package.json"));
+  let canvasMod;
+  try {
+    canvasMod = require("@napi-rs/canvas");
+  } catch {
+    console.log("❌ run `npm install` first (@napi-rs/canvas)");
+    process.exit(1);
+  }
+  const { createCanvas, loadImage } = canvasMod;
+  const { svgProblems, normalizeSvg } = await import("../src/lib/safeSvg.js");
+  const words = new Map();
+  for (const f of fs.readdirSync(path.join(dir, "units")).filter((f) => f.endsWith(".json")).sort()) {
+    const u = JSON.parse(fs.readFileSync(path.join(dir, "units", f), "utf8"));
+    for (const v of u.vocabulary) if (!words.has(picKey(v.word)) || (!words.get(picKey(v.word)).pic && v.pic)) words.set(picKey(v.word), { ...v, unit: u.order });
+  }
+  const list = [...words.values()];
+  const C = 160, L = 22, perRow = 4, perSheet = 32;
+  const pageCache = new Map();
+  const missing = [];
+  const unsafe = [];
+  for (let s = 0; s * perSheet < list.length; s++) {
+    const chunk = list.slice(s * perSheet, (s + 1) * perSheet);
+    const rows = Math.ceil(chunk.length / perRow);
+    const sheet = createCanvas(perRow * (2 * C + 12), rows * (C + L + 8));
+    const g = sheet.getContext("2d");
+    g.fillStyle = "#fff";
+    g.fillRect(0, 0, sheet.width, sheet.height);
+    for (const [i, v] of chunk.entries()) {
+      const x0 = (i % perRow) * (2 * C + 12);
+      const y0 = Math.floor(i / perRow) * (C + L + 8);
+      const fit = (img, sx, sy, sw, sh, x) => {
+        const k = Math.min((C - 8) / sw, (C - 8) / sh);
+        g.drawImage(img, sx, sy, sw, sh, x + (C - sw * k) / 2, y0 + (C - sh * k) / 2, sw * k, sh * k);
+      };
+      g.strokeStyle = "#ddd";
+      g.strokeRect(x0 + 1, y0 + 1, C - 2, C - 2);
+      g.strokeRect(x0 + C + 1, y0 + 1, C - 2, C - 2);
+      if (v.pic) {
+        const file = path.join(dir, "pages", `p-${String(v.pic.page).padStart(3, "0")}.png`);
+        if (fs.existsSync(file)) {
+          if (!pageCache.has(file)) pageCache.set(file, await loadImage(fs.readFileSync(file)));
+          const img = pageCache.get(file);
+          const [bx, by, bw, bh] = v.pic.box;
+          fit(img, bx * img.width, by * img.height, bw * img.width, bh * img.height, x0);
+        }
+      } else {
+        g.fillStyle = "#999";
+        g.font = "14px sans-serif";
+        g.fillText("(no book box)", x0 + 30, y0 + C / 2);
+      }
+      const svgFile = path.join(dir, "pictures", pictureFile(v.word));
+      if (fs.existsSync(svgFile)) {
+        const svg = fs.readFileSync(svgFile, "utf8");
+        const problems = svgProblems(svg);
+        if (problems.length) unsafe.push(`${v.word}: ${problems.join("; ")}`);
+        try {
+          const img = await loadImage(Buffer.from(normalizeSvg(svg)));
+          fit(img, 0, 0, img.width, img.height, x0 + C);
+        } catch (e) {
+          unsafe.push(`${v.word}: cannot be drawn (${e.message})`);
+        }
+      } else missing.push(v.word);
+      g.fillStyle = "#222";
+      g.font = "15px sans-serif";
+      g.fillText(`${v.unit}: ${v.word}   book | drawing`, x0 + 4, y0 + C + 16);
+    }
+    const out = path.join(dir, `pictures-sheet${s ? `-${s + 1}` : ""}.png`);
+    fs.writeFileSync(out, await sheet.encode("png"));
+    console.log(`wrote ${path.relative(ROOT, out)}`);
+  }
+  console.log(`${list.length} words, ${list.length - missing.length} drawn.`);
+  if (missing.length) console.log(`⚠️  not drawn yet: ${missing.join(", ")}`);
+  for (const u of unsafe) console.log(`❌ ${u}`);
+  return !unsafe.length;
 }
 
 function rebuildIndex() {
@@ -218,6 +428,8 @@ if (cmd === "id" && args[0]) {
   process.exit(ok ? 0 : 1);
 } else if (cmd === "index") {
   rebuildIndex();
+} else if (cmd === "pictures" && args[0]) {
+  process.exit((await pictureSheet(path.resolve(args[0]))) ? 0 : 1);
 } else if (cmd === "assemble" && args[0]) {
   const o = args.indexOf("--out");
   const target = assemble(path.resolve(args[0]), o >= 0 && args[o + 1] ? path.resolve(args[o + 1]) : undefined);
@@ -227,6 +439,7 @@ if (cmd === "id" && args[0]) {
 } else {
   console.log(`Usage:
   node tools/book-package.mjs id <book.pdf>
+  node tools/book-package.mjs pictures <workDir>
   node tools/book-package.mjs assemble <workDir> [--out <file>] [-v]
   node tools/book-package.mjs check <package.json> [-v]
   node tools/book-package.mjs index`);

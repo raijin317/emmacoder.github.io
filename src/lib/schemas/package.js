@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { UnitExtractCore } from "./book.js";
 import { PackItem } from "./content.js";
+import { svgProblems } from "../safeSvg.js";
 
 /**
  * A "book package": everything read from one textbook PDF, plus the lessons Claude wrote for it
@@ -47,6 +48,11 @@ export const BookPackage = z
         version: z.number().int().min(1),
         book: PackageBook,
         units: z.array(PackageUnit).min(1),
+        /**
+         * Pictures Claude drew for the unit words (lesson rule 2): picKey(word) → SVG markup.
+         * One drawing per word for the whole book (a word met again in a review unit uses the same one).
+         */
+        pictures: z.record(z.string().min(1).max(80), z.string()).default({}),
         notes: z.string().optional(),
         generatedBy: z.string().optional(),
         generatedAt: z.string().optional(),
@@ -63,6 +69,10 @@ export const BookPackage = z
                 if (!CLAUDE_TYPES.includes(it.type)) ctx.addIssue({ code: "custom", path: ["units", i, "items", k, "type"], message: `“${it.type}” is made by the app itself — only ${CLAUDE_TYPES.join(", ")} belong in a package` });
             });
         });
+        for (const [key, svg] of Object.entries(p.pictures)) {
+            const problems = svgProblems(svg);
+            if (problems.length) ctx.addIssue({ code: "custom", path: ["pictures", key], message: `the drawing of “${key}” is not allowed: ${problems.join("; ")}` });
+        }
     });
 
 /** The id of a package unit in the app ("<bookId>-u03"). */

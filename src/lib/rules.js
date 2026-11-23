@@ -25,7 +25,7 @@ export const DEFAULT_RULES = [
     {
         id: RULE.bookPictures,
         on: true,
-        text: "Show the book's own pictures for the unit words, so the child sees the same pictures as in class. Use an emoji only when the book has no picture for a word.",
+        text: "Use Claude AI generate pictures for the unit words, so the child sees the similar pictures as in class.",
     },
     {
         id: RULE.bookReading,
@@ -41,16 +41,25 @@ export const DEFAULT_RULES = [
 /** What each built-in rule does (shown in the rules page). */
 export const RULE_EFFECT = {
     [RULE.bookOnly]: "Lessons are made only from the words, patterns and sentences typed in for the unit (earlier units' words appear as review choices).",
-    [RULE.bookPictures]: "Pictures cut from the book pages replace the emoji in every activity, game and printout.",
+    [RULE.bookPictures]: "The pictures Claude drew for the unit words (in a book package) replace the emoji in every activity, game and printout. A word without a drawing shows the picture cut from the book page when the book's PDF is added in this browser.",
     [RULE.bookReading]: "The Reading lesson shows the unit's reading text exactly as printed in the book.",
     [RULE.kidClear]: "Lessons use short instructions, a few choices and cheerful feedback.",
 };
 export const isBuiltInRule = (id) => DEFAULT_RULES.some((r) => r.id === id);
 /** Stored rules merged with the built-ins (built-ins can be edited or switched off, never lost). */
+/** Earlier default wordings: a saved rule still in one of them gets today's wording (it was never edited). */
+const OLD_DEFAULTS = {
+    [RULE.bookPictures]: ["Show the book's own pictures for the unit words, so the child sees the same pictures as in class. Use an emoji only when the book has no picture for a word."],
+};
 export function mergeRules(stored) {
     const parsed = LessonRules.safeParse(stored);
     const list = parsed.success ? parsed.data : [];
-    const out = DEFAULT_RULES.map((d) => list.find((r) => r.id === d.id) ?? d);
+    const out = DEFAULT_RULES.map((d) => {
+        const saved = list.find((r) => r.id === d.id);
+        if (!saved)
+            return d;
+        return OLD_DEFAULTS[d.id]?.includes(saved.text) ? { ...saved, text: d.text } : saved;
+    });
     for (const r of list)
         if (!isBuiltInRule(r.id) && !out.some((o) => o.id === r.id))
             out.push(r);

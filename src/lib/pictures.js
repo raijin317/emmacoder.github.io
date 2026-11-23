@@ -10,8 +10,16 @@ export function picKey(word) {
 export function cropUrl(bookId, pic, size = 400) {
     return `/api/books/${bookId}/crop?p=${pic.page}&b=${pic.box.map((n) => n.toFixed(4)).join(",")}&s=${size}`;
 }
-/** Map of word → picture URL (plus emoji → URL when an emoji belongs to one word only). */
-export function buildPictureMap(bookId, units) {
+/** A picture Claude drew for a word of the book (book packages, lesson rule 2). */
+export function drawnUrl(bookId, key, version = "") {
+    return `/api/books/${bookId}/drawn/${encodeURIComponent(key)}${version ? `?v=${encodeURIComponent(version)}` : ""}`;
+}
+/**
+ * Map of word → picture URL (plus emoji → URL when an emoji belongs to one word only).
+ * o.drawn: the book's drawings (picKey → version) — they come first; o.crops: also use pictures
+ * cut from the book pages (only when the PDF's pages are in this browser).
+ */
+export function buildPictureMap(bookId, units, o = { crops: true }) {
     const map = {};
     const emojiOwners = new Map();
     for (const u of units)
@@ -22,10 +30,11 @@ export function buildPictureMap(bookId, units) {
         }
     for (const u of units)
         for (const v of u.vocabulary) {
-            if (!v.pic)
-                continue;
-            const url = cropUrl(bookId, v.pic);
             const k = picKey(v.word);
+            const version = o.drawn?.get(k);
+            const url = version !== undefined ? drawnUrl(bookId, k, version) : v.pic && o.crops !== false ? cropUrl(bookId, v.pic) : null;
+            if (!url)
+                continue;
             map[`w:${k}`] ??= url;
             if (v.emoji && emojiOwners.get(v.emoji)?.size === 1)
                 map[`e:${v.emoji}`] ??= url;
