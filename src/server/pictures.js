@@ -1,12 +1,12 @@
-import { buildPictureMap, cropUrl, drawnUrl, picKey } from "@/lib/pictures.js";
+import { buildPictureMap, drawnUrl, pictureUrl } from "@/lib/pictures.js";
 import { RULE, ruleOn } from "@/lib/rules.js";
 import { bookPictureKeys, getLessonRules, getUnit, listUnits } from "./repo.js";
 import { hasPages } from "./books/pages.js";
 /**
- * Pictures for a unit's words (lesson rule 2): first the pictures Claude drew for the book (book package),
- * then — for words without a drawing — the picture cut from the book page when the PDF's pages are in this
- * browser. Its own words plus the earlier units' words (used for review). Nothing when the parent switched
- * the rule off (then the emoji are used).
+ * Pictures for a unit's words (lesson rule 2): for each word the picture chosen in the unit's word list —
+ * the picture Claude drew (book package), the picture cut from the book page (when the PDF's pages are in
+ * this browser) or the emoji; not chosen = drawing, then book picture, then emoji. Its own words plus the
+ * earlier units' words (used for review). Nothing when the parent switched the rule off (then the emoji are used).
  */
 export function picturesForUnit(unit) {
     if (!unit || !ruleOn(getLessonRules(), RULE.bookPictures))
@@ -26,16 +26,13 @@ export function picturesForItem(item) {
         return item.unitId ? picturesForUnit(getUnit(item.unitId)) : {};
     return {};
 }
-/** Up to `n` picture URLs of a unit's words, for covers and banners (drawings first). */
+/** Up to `n` picture URLs of a unit's words, for covers and banners (the picture chosen for each word). */
 export function unitCovers(unit, n = 4) {
-    const drawn = bookPictureKeys(unit.bookId);
-    const crops = hasPages(unit.bookId);
+    const o = { drawn: bookPictureKeys(unit.bookId), crops: hasPages(unit.bookId) };
     return unit.extract.vocabulary
         .flatMap((v) => {
-        const k = picKey(v.word);
-        if (drawn.has(k))
-            return [drawnUrl(unit.bookId, k, drawn.get(k))];
-        return v.pic && crops ? [cropUrl(unit.bookId, v.pic, 320)] : [];
+        const url = pictureUrl(unit.bookId, v, o, 320);
+        return url ? [url] : [];
     })
         .slice(0, n);
 }

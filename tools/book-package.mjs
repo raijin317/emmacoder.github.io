@@ -3,6 +3,7 @@
 //
 //   node tools/book-package.mjs id <book.pdf>              book id (as the app makes it) + page count
 //   node tools/book-package.mjs pictures <workDir>         sheet: book picture | Claude's drawing for every word (rule 2 self-check)
+//   node tools/book-package.mjs pictures <workDir> --big   the drawings alone, big — to judge how cute and clear they are
 //   node tools/book-package.mjs assemble <workDir> [--out <file>] [-v]
 //                                                          work folder → package (content/books/<id>.json by default) + check + index
 //   node tools/book-package.mjs check <package.json> [-v]  validate; level; lessons per unit; what the rules would drop
@@ -220,8 +221,11 @@ function check(file, verbose) {
   const book = new BookLanguage();
   const drawn = new Set(Object.keys(pkg.pictures));
   const allKeys = new Set(units.flatMap((u) => u.vocabulary.map((v) => picKey(v.word))));
-  console.log(`   Pictures drawn by Claude (rule 2): ${[...allKeys].filter((k) => drawn.has(k)).length}/${allKeys.size} words`);
+  const boxed = new Set(units.flatMap((u) => u.vocabulary.filter((v) => v.pic).map((v) => picKey(v.word))));
+  console.log(`   Pictures (rule 2) — each word offers 3: drawn by Claude ${[...allKeys].filter((k) => drawn.has(k)).length}/${allKeys.size}, book picture box ${[...allKeys].filter((k) => boxed.has(k)).length}/${allKeys.size}, emoji ${new Set(units.flatMap((u) => u.vocabulary.filter((v) => v.emoji?.trim()).map((v) => picKey(v.word)))).size}/${allKeys.size}`);
   for (const k of drawn) if (!allKeys.has(k)) warn(`a drawing for “${k}”, which is not a word of any unit (it is never shown)`);
+  const noBox = [...allKeys].filter((k) => !boxed.has(k));
+  if (noBox.length && pkg.book.pageCount) warn(`rule 2: no book picture box for ${noBox.map((k) => `“${k}”`).join(", ")} in any unit — the parent can't choose the book's picture for ${noBox.length > 1 ? "them" : "it"}`);
   for (const u of units) {
     const words = u.vocabulary.filter((v) => v.word.trim());
     const slot = u.patterns.filter((x) => (x.text.match(/_{2,}/g) ?? []).length === 1);
@@ -231,6 +235,10 @@ function check(file, verbose) {
     console.log(`   ${words.length} words (${words.filter((v) => drawn.has(picKey(v.word))).length} drawn, ${words.filter((v) => v.pic).length} with a book picture box), ${u.patterns.length} patterns (${slot.length} with one ___), ${u.sentences.length} sentences, ${u.readings.length} reading texts, confidence ${u.confidence}`);
     if (words.length < 3) err("fewer than 3 words — the app can't make lessons for this unit");
     for (const v of words) if (!v.emoji?.trim()) warn(`“${v.word}” has no emoji`);
+    for (const v of words) {
+      if (v.show === "drawing" && !drawn.has(picKey(v.word))) warn(`“${v.word}” is set to show the drawing, but there is no drawing of it`);
+      if (v.show === "book" && !boxed.has(picKey(v.word))) warn(`“${v.word}” is set to show the book's picture, but no unit has a box for it`);
+    }
     const undrawn = words.filter((v) => !drawn.has(picKey(v.word))).map((v) => v.word);
     if (undrawn.length) warn(`rule 2: no drawing for ${undrawn.map((w) => `“${w}”`).join(", ")} — draw pictures/${pictureFile(undrawn[0])}${undrawn.length > 1 ? " …" : ""}`);
     if (u.confidence < 0.6) warn(`low confidence${u.notes ? `: ${u.notes}` : ""}`);
@@ -389,7 +397,7 @@ async function pictureSheet(dir) {
       } else missing.push(v.word);
       g.fillStyle = "#222";
       g.font = "15px sans-serif";
-      g.fillText(`${v.unit}: ${v.word}   book | drawing`, x0 + 4, y0 + C + 16);
+      g.fillText(`${v.unit}: ${v.word}   book | drawing${v.show ? `  (shows: ${v.show})` : ""}`, x0 + 4, y0 + C + 16);
     }
     const out = path.join(dir, `pictures-sheet${s ? `-${s + 1}` : ""}.png`);
     fs.writeFileSync(out, await sheet.encode("png"));
@@ -399,6 +407,42 @@ async function pictureSheet(dir) {
   if (missing.length) console.log(`⚠️  not drawn yet: ${missing.join(", ")}`);
   for (const u of unsafe) console.log(`❌ ${u}`);
   return !unsafe.length;
+}
+
+/**
+ * Quality look: only the drawings, big (240 px), 20 per sheet → <workDir>/pictures-big-1.png, -2 …
+ * To judge them as the child sees them: cute, clear, finished (see Import_Book.md step 4).
+ */
+async function bigSheet(dir) {
+  const { createRequire } = await import("node:module");
+  const { createCanvas, loadImage } = createRequire(path.join(ROOT, "package.json"))("@napi-rs/canvas");
+  const { normalizeSvg } = await import("../src/lib/safeSvg.js");
+  const files = fs.readdirSync(path.join(dir, "pictures")).filter((f) => f.endsWith(".svg")).sort();
+  const T = 240, cols = 5, per = 20;
+  for (let s = 0; s * per < files.length; s++) {
+    const chunk = files.slice(s * per, (s + 1) * per);
+    const c = createCanvas(cols * T, Math.ceil(chunk.length / cols) * (T + 22));
+    const g = c.getContext("2d");
+    g.fillStyle = "#fff";
+    g.fillRect(0, 0, c.width, c.height);
+    for (const [i, f] of chunk.entries()) {
+      const x = (i % cols) * T, y = Math.floor(i / cols) * (T + 22);
+      const src = fs.readFileSync(path.join(dir, "pictures", f), "utf8");
+      try {
+        g.drawImage(await loadImage(Buffer.from(normalizeSvg(src))), x + 5, y + 5, T - 10, T - 10);
+      } catch (e) {
+        console.log(`❌ ${f}: cannot be drawn (${e.message})`);
+      }
+      g.strokeStyle = "#eee";
+      g.strokeRect(x + 0.5, y + 0.5, T - 1, T - 1);
+      g.fillStyle = "#222";
+      g.font = "16px sans-serif";
+      g.fillText(`${f.replace(/\.svg$/, "")} (${(src.length / 1024).toFixed(1)} KB)`, x + 6, y + T + 16);
+    }
+    const out = path.join(dir, `pictures-big-${s + 1}.png`);
+    fs.writeFileSync(out, await c.encode("png"));
+    console.log(`wrote ${path.relative(ROOT, out)}`);
+  }
 }
 
 function rebuildIndex() {
@@ -429,7 +473,9 @@ if (cmd === "id" && args[0]) {
 } else if (cmd === "index") {
   rebuildIndex();
 } else if (cmd === "pictures" && args[0]) {
-  process.exit((await pictureSheet(path.resolve(args[0]))) ? 0 : 1);
+  const dir = path.resolve(args.find((a) => a !== "--big"));
+  if (args.includes("--big")) await bigSheet(dir);
+  else process.exit((await pictureSheet(dir)) ? 0 : 1);
 } else if (cmd === "assemble" && args[0]) {
   const o = args.indexOf("--out");
   const target = assemble(path.resolve(args[0]), o >= 0 && args[o + 1] ? path.resolve(args[o + 1]) : undefined);
@@ -439,7 +485,7 @@ if (cmd === "id" && args[0]) {
 } else {
   console.log(`Usage:
   node tools/book-package.mjs id <book.pdf>
-  node tools/book-package.mjs pictures <workDir>
+  node tools/book-package.mjs pictures <workDir> [--big]
   node tools/book-package.mjs assemble <workDir> [--out <file>] [-v]
   node tools/book-package.mjs check <package.json> [-v]
   node tools/book-package.mjs index`);

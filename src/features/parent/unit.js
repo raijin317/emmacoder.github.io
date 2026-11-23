@@ -13,7 +13,7 @@ import { JobLog, PageModal } from "./books.js";
 import { useJob } from "./common.js";
 import { PicturePicker } from "./picker.js";
 import { RulesNote } from "./rules.js";
-import { cropUrl, picKey } from "@/lib/pictures.js";
+import { cropUrl, picKey, pictureKind } from "@/lib/pictures.js";
 import { bookTexts } from "@/lib/bookText.js";
 export function UnitWorkspace({ unitId }) {
     const { data, error, reload } = useApi(`/api/units/${unitId}`);
@@ -92,6 +92,13 @@ function ExtractEditor({ data, onSaved }) {
     // Pictures Claude drew for the book's words (book package, lesson rule 2).
     const hasDrawings = Object.keys(data.drawn ?? {}).length > 0;
     const pages = book.isDemo || !book.hasPages ? [] : Array.from({ length: Math.max(0, Math.min(unit.pages[1], book.pageCount || unit.pages[1]) - unit.pages[0] + 1) }, (_, k) => unit.pages[0] + k);
+    // Each word can show Claude's drawing, the book's own picture (needs the PDF in this browser) or its emoji.
+    // A word met again (review units) without its own book picture or choice uses the ones from an earlier unit.
+    const pdf = !book.isDemo && !!book.hasPages;
+    const choosePictures = hasDrawings || pdf;
+    const bookPic = (v) => v.pic ?? data.earlier?.pic?.[picKey(v.word)];
+    const has = (v) => ({ drawing: !!data.drawn?.[picKey(v.word)], book: !!bookPic(v) && pdf });
+    const showAll = (kind) => upd((x) => (x.vocabulary.forEach((v) => (v.show = kind)), x));
     return (html`<div className="flex flex-col gap-6">
       ${unit.status !== "approved" && (html`<div className="rounded-2xl bg-orange-soft p-4">
           <b>Type in what this unit of the book teaches</b> — its words (each with an emoji${book.hasPages ? " and the book's picture" : ""}), sentence patterns, sentences and reading texts — then approve. Only approved units are used for your child. At least 3 words are needed to make lessons.
@@ -149,15 +156,22 @@ function ExtractEditor({ data, onSaved }) {
         setPicking(null);
     }} />`)}
       <${Panel} title=${`🃏 Words (${ex.vocabulary.length})`} actions=${html`<${Button} onClick=${() => upd((e) => (e.vocabulary.push({ word: "", emoji: "⭐" }), e))}>+ Add word<//>`}>
-        ${(hasDrawings || pages.length > 0) && (html`<p className="mb-2 text-sm text-ink-soft">
-            ${hasDrawings && html`The child sees the <b>picture Claude drew</b> for each word (like the book's picture). `}${pages.length > 0 && html`${hasDrawings ? "Words without a drawing show the" : "The child sees the"} <b>book's own picture</b> — click a picture (or 📷) to choose it on the page. `}The emoji is used only when there is no picture.
-          </p>`)}
+        ${choosePictures && (html`<div className="mb-3 flex flex-col gap-2 rounded-2xl bg-cream p-3 text-sm">
+            <p>
+              <b>Choose the picture your child sees</b> for each word:${hasDrawings && html` ✏️ the picture <b>Claude drew</b>,`} 📖 the <b>book's own picture</b>${pdf ? html` (📷 = choose it on the page)` : html` (add the book's PDF to see it)`} or 😀 the <b>emoji</b>. Then press 💾 Save.
+            </p>
+            <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Picture for all words">
+              <span className="font-bold">All words:</span>
+              ${hasDrawings && html`<${Button} onClick=${() => showAll("drawing")}>✏️ Drawings<//>`}
+              ${pdf && html`<${Button} onClick=${() => showAll("book")}>📖 Book pictures<//>`}
+              <${Button} onClick=${() => showAll("emoji")}>😀 Emoji<//>
+            </div>
+          </div>`)}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-left">
             <thead className="text-sm text-ink-soft">
               <tr>
-                ${hasDrawings && html`<th className="p-1">Drawing</th>`}
-                <th className="p-1">Book picture</th>
+                ${choosePictures && html`<th className="p-1">Picture your child sees</th>`}
                 <th className="p-1">Emoji</th>
                 <th className="p-1">Word</th>
                 <th className="p-1">Vietnamese (for you)</th>
@@ -165,15 +179,29 @@ function ExtractEditor({ data, onSaved }) {
               </tr>
             </thead>
             <tbody>
-              ${ex.vocabulary.map((v, k) => (html`<tr key=${k} className="border-t border-line">
-                  ${hasDrawings && html`<td className="p-1">
-                      ${data.drawn[picKey(v.word)] ? html`<${ApiImg} src=${data.drawn[picKey(v.word)]} fallback=${v.emoji} alt=${v.word} title="Drawn by Claude" className="h-16 w-16 rounded-xl border-2 border-line bg-white object-contain" />` : html`<span className="text-sm text-ink-soft">—</span>`}
+              ${ex.vocabulary.map((v, k) => {
+        const w = v.word || "this word";
+        const h = has(v);
+        const shown = pictureKind({ ...v, show: v.show ?? data.earlier?.show?.[picKey(v.word)] }, h);
+        const own = !!v.pic;
+        const pick = (kind) => upd((x) => ((x.vocabulary[k].show = kind), x));
+        return (html`<tr key=${k} className="border-t border-line">
+                  ${choosePictures && html`<td className="p-1">
+                      <div className="flex items-center gap-1" role="radiogroup" aria-label=${`Picture for ${w}`}>
+                        ${hasDrawings && html`<${PictureChoice} label=${`Claude's drawing of ${w}`} tag="✏️" selected=${shown === "drawing"} disabled=${!h.drawing} title=${h.drawing ? "Drawn by Claude" : "No drawing of this word"} onPick=${() => pick("drawing")}>
+                            ${h.drawing ? html`<${ApiImg} src=${data.drawn[picKey(v.word)]} fallback=${v.emoji} alt=${v.word} title="Drawn by Claude" className="h-full w-full object-contain" />` : "—"}
+                          <//>`}
+                        <${PictureChoice} label=${`The book's picture of ${w}`} tag="📖" selected=${shown === "book"} disabled=${!h.book} title=${h.book ? (own ? "Picture from the book" : "Picture from the book (as in an earlier unit)") : pdf ? "Press 📷 to choose the book's picture" : "Add the book's PDF to see the book's picture"} onPick=${() => pick("book")}>
+                          ${h.book ? html`<${ApiImg} src=${cropUrl(book.id, bookPic(v), 160)} fallback="📖" alt=${v.word} className="h-full w-full object-contain" />` : "📖"}
+                        <//>
+                        <${PictureChoice} label=${`The emoji for ${w}`} tag="😀" selected=${shown === "emoji"} title="The emoji" onPick=${() => pick("emoji")}>
+                          ${v.emoji || "⭐"}
+                        <//>
+                        ${pages.length > 0 && html`<button type="button" onClick=${() => setPicking(k)} aria-label=${`Choose the book picture for ${w}`} title="Choose the book's picture on the page" className="flex h-10 w-10 items-center justify-center rounded-xl border-2 border-dashed border-line bg-paper text-xl hover:border-sun">
+                            📷
+                          </button>`}
+                      </div>
                     </td>`}
-                  <td className="p-1">
-                    ${pages.length > 0 ? (html`<button type="button" onClick=${() => setPicking(k)} aria-label=${`Choose the book picture for ${v.word || "this word"}`} className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-line bg-paper text-2xl hover:border-sun">
-                        ${v.pic ? html`<${ApiImg} src=${cropUrl(book.id, v.pic, 160)} fallback="📷" alt=${v.word} className="h-full w-full object-contain" />` : "📷"}
-                      </button>`) : (html`<span className="text-sm text-ink-soft">—</span>`)}
-                  </td>
                   <td className="p-1">
                     <input aria-label="Emoji" className=${`${inputCls} w-20 text-center text-2xl`} value=${v.emoji ?? ""} onChange=${(e) => upd((x) => ((x.vocabulary[k].emoji = e.target.value), x))} />
                   </td>
@@ -189,7 +217,8 @@ function ExtractEditor({ data, onSaved }) {
                       ✕
                     <//>
                   </td>
-                </tr>`))}
+                </tr>`);
+    })}
             </tbody>
           </table>
         </div>
@@ -258,6 +287,14 @@ function ExtractEditor({ data, onSaved }) {
         ${msg && html`<span className="font-bold">${msg}</span>`}
       </div>
     </div>`);
+}
+/** One of a word's pictures (drawing / book picture / emoji); the chosen one has a yellow frame and ✓. */
+function PictureChoice({ label, tag, selected, disabled, title, onPick, children }) {
+    return (html`<button type="button" role="radio" aria-checked=${selected} aria-label=${label} title=${title} disabled=${disabled} onClick=${onPick} className=${`relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border-4 bg-white text-3xl ${selected ? "border-sun shadow-md" : "border-line hover:border-sun-deep"} ${disabled ? "cursor-not-allowed opacity-40" : ""}`}>
+      ${children}
+      <span className="absolute bottom-0 left-0 rounded-tr-lg bg-paper px-0.5 text-xs leading-4">${tag}</span>
+      ${selected && html`<span className="absolute right-0 top-0 rounded-bl-lg bg-sun px-1 text-xs font-bold leading-4">✓</span>`}
+    </button>`);
 }
 /* ------------------------------ Practice pack ------------------------------ */
 function PracticePanel({ data, onChange }) {

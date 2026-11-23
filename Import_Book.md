@@ -3,8 +3,9 @@
 > **Cho phụ huynh:** đặt file PDF vào `resources/book/` (thư mục này không bao giờ được đưa lên GitHub), rồi nói với Claude:
 > *"Đọc Import_Book.md và import sách `resources/book/<tên file>.pdf`"*.
 > Muốn giữ riêng tư (không đưa nội dung sách lên web public), nói thêm: *"giữ riêng tư"*.
-> Claude đọc sách, **vẽ hình cho từng từ** (giống hình trong sách) và viết bài học theo 4 quy tắc ở mục 2. Xong việc, Claude báo kết quả.
+> Claude đọc sách, **vẽ hình cho từng từ** (giống hình trong sách, kiểu hoạt hình dễ thương) và viết bài học theo 4 quy tắc ở mục 2. Xong việc, Claude báo kết quả.
 > Bạn push repo lên GitHub (hoặc vào **Parent → Books → 📦 Import a book package**), rồi vào **Children → Edit** tích chọn sách cho bé.
+> Mỗi từ có **3 lựa chọn hình**: ✏️ hình Claude vẽ, 📖 hình trong sách (cần thêm PDF của sách vào trình duyệt), 😀 emoji. Bạn chọn hình bé sẽ thấy ở trang unit → tab **📖 From the book** → cột **Picture your child sees** (hoặc nút **All words** cho cả unit), rồi **💾 Save**.
 
 **This file is for Claude.** Follow it whenever the parent asks you to import a book. It is the static site's version of the desktop app's **Import Book** feature (`D:\Project_Workspace\01_Dashbord_ENG`): there, the app called Claude to read the PDF, find the units, extract what each unit teaches, assess the level and write the lessons. Here **you** do those steps — and draw a picture for every unit word — and write one **book package** (JSON). The site imports the package, checks your lessons against the family's lesson rules and adds the lessons it always builds itself.
 
@@ -23,7 +24,7 @@ Use the private output when the parent says so ("private", "riêng tư", "don't 
 
 The site does the rest when it imports the package (`src/server/books/package.js`):
 - the units are **approved** at once (like the desktop import), and the level/age assessment is computed from them (`assessBook`);
-- your **drawings** are stored with the book and replace the emoji of the unit words in every activity, game and printout — in every browser, without the PDF;
+- every unit word offers the parent **three pictures**: your **drawing** (stored with the book, shown in every browser without the PDF), the **book's own picture** (cut from the page at the word's `pic` box — only in a browser where the parent added the PDF) and its **emoji**. The parent picks one per word in the unit page (📖 From the book → *Picture your child sees*); not picked = your drawing, else the book's picture, else the emoji. The chosen picture replaces the emoji in every activity, game and printout;
 - your lessons are checked: a lesson that uses a word outside the book, or a reading that is not the book's own text, is **dropped** and rebuilt offline;
 - the app **always builds** `vocabulary`, two mini `game`s (chosen by topic, different from the units just before) and a `worksheet`, and builds offline any of your lesson types that is missing;
 - a newer package `version` is imported again, but a unit whose words the parent edited, or whose lessons the parent edited, keeps the parent's version.
@@ -57,13 +58,14 @@ How it is checked: `check` reports ❌ **rule 1** for every sentence that is not
 
 > *Use Claude AI generate pictures for the unit words, so the child sees the similar pictures as in class.*
 
-What it means for you:
-- **Draw one picture for every word** in the units' `vocabulary` (once per word for the whole book — a word met again in a review unit uses the same drawing). How: step 4.
-- Each drawing shows **the same thing as the book's picture of that word** — same object, same main colours, same view or pose, the same kind of friendly cartoon look — so the child recognizes it from class. It is **your own simple drawing**: don't trace the page, and don't copy characters' faces, logos or printed text.
-- Still give every word its `emoji`, and use exactly that emoji for the word in the lessons: the app swaps the emoji for your drawing (in `mc` and `tf` questions it finds the drawing by the emoji). The emoji is shown only where there is no drawing.
-- Keep the `pic` boxes (where the book's own picture is on the page): you need them to look at the book's picture while drawing, and the app uses the cut-out book picture for a word without a drawing when the parent adds the PDF in a browser.
+What it means for you — **every word gets three pictures**, so the parent can choose:
+1. ✏️ **Your drawing** — draw one picture for every word in the units' `vocabulary` (once per word for the whole book — a word met again in a review unit uses the same drawing). It shows **the same thing as the book's picture of that word** — same object, same main colours, same view or pose — so the child recognizes it from class, drawn in the **cute sticker style** of `tools/draw-kit.mjs` so that a young child *wants* to look at it (step 4 says exactly how). It is **your own drawing**: don't trace the page, and don't copy characters' faces, logos or printed text.
+2. 📖 **The book's own picture** — a `pic` box for every word (where its picture is on the page). If the unit has no picture of the word, box the clearest picture of it anywhere in the book (e.g. "sixteen" → the cake with the 16 candle on another page). A review unit may leave out the box of a word an earlier unit has — the app uses that one.
+3. 😀 **The emoji** — one `emoji` per word, and exactly that emoji for the word in the lessons: the app swaps the emoji for the chosen picture (in `mc` and `tf` questions it finds the picture by the emoji).
 
-How it is checked: `check` reports ⚠️ **rule 2** for words without a drawing and ❌ for a drawing that is not a safe, plain picture (see §6 "Drawings"); `pictures` puts the book's picture and your drawing side by side for you to look at.
+The parent picks one per word (or for the whole unit) in the app. You may preset the choice with `"show": "drawing" | "book" | "emoji"` on a word — normally leave it out (= your drawing first); use `"book"` only for a word whose book picture is much clearer than anything you can draw, and say so in the report.
+
+How it is checked: `check` prints how many words have each of the three pictures, reports ⚠️ **rule 2** for a word without a drawing, a word without a book picture box, or a `show` pointing to a picture that is not there, and ❌ for a drawing that is not a safe, plain picture (see §6 "Drawings"). `pictures` puts the book's picture and your drawing side by side; `pictures --big` shows your drawings large, to judge their quality.
 
 ### Rule 3 — Reading is the book's text
 
@@ -99,13 +101,16 @@ npm install                                                      # once: the too
 npm run book:pages -- <book.pdf>                                 # every page → resources/.work/<bookId>/pages/p-001.png …
 node tools/book-package.mjs id <book.pdf>                       # book id + page count (same id as the app makes)
 node tools/book-package.mjs pictures resources/.work/<bookId>    # sheet: book picture | your drawing, for every word (rule 2)
+node tools/book-package.mjs pictures resources/.work/<bookId> --big   # your drawings alone, large (quality look)
 node tools/book-package.mjs assemble resources/.work/<bookId> -v # work files → package + check + index
 node tools/book-package.mjs assemble resources/.work/<bookId> --out resources/packages/<bookId>.json -v   # private
 node tools/book-package.mjs check <package.json> -v              # check a package again
 node tools/book-package.mjs index                                # rebuild content/books/index.json
 ```
 
-`check` uses the site's own schemas and rules. It prints the book's **level** (the numbers you must write to), per unit what is there, ❌ errors (rule 1 sentences, rule 3 readings, unsafe drawings, lessons the app would drop) and ⚠️ warnings (missing drawings, too many choices, long sentences or instructions, wrong emoji, missing lesson types).
+`check` uses the site's own schemas and rules. It prints the book's **level** (the numbers you must write to), per unit what is there, ❌ errors (rule 1 sentences, rule 3 readings, unsafe drawings, lessons the app would drop) and ⚠️ warnings (missing drawings or book picture boxes, too many choices, long sentences or instructions, wrong emoji, missing lesson types).
+
+`tools/draw-kit.mjs` is the drawing kit for step 4: outline, gradients, gloss, shadows, big shiny eyes, cheeks, mouths, clouds, sun, trees, bubble numbers. Use it for every drawing (read its header first).
 
 Look at the pages with the **Read** tool on the PNG files from `npm run book:pages` (`resources/.work/<bookId>/pages/p-007.png` = PDF page 7). They are drawn at the same size as the site draws pages, so a picture box measured on them matches the app. (Reading the PDF itself with `pages` needs poppler, which is not installed on the family PC.) Textbooks are usually scanned pictures, so read the pages as images. **Page numbers in everything you write are PDF page indexes** (1 = the first page of the file), never the numbers printed on the pages.
 
@@ -154,7 +159,8 @@ For each unit, read its pages (**at most 8 pages per pass**; for a longer unit, 
   - `emoji`: the one emoji that best shows it (**always give one**; it is shown when there is no picture);
   - `vi`: a short Vietnamese meaning for the parent;
   - `page`: where it is taught;
-  - `pic`: where the book's **own picture** of this word is: `{ "page": 7, "box": [left, top, width, height] }` as fractions 0–1 of the **whole page image** measured from its top-left corner. Draw the box snugly around the one drawing/photo of this word: the whole object, without the printed label or neighbouring pictures. Leave `pic` out when the word has no clear picture of its own. (Picture: imagine a 10 × 10 grid over the page; `[0.10, 0.12, 0.30, 0.21]` starts 1 column in and a bit more than 1 row down, and is 3 columns wide and 2 rows high.)
+  - `pic`: where the book's **own picture** of this word is: `{ "page": 7, "box": [left, top, width, height] }` as fractions 0–1 of the **whole page image** measured from its top-left corner. Draw the box snugly around the one drawing/photo of this word: the whole object, without the printed label or neighbouring pictures. **Every word needs one** (it is the parent's 📖 choice, rule 2): when the unit has no picture of the word, box the clearest picture of it on another page of the book (the box's `page` may be outside the unit); only a review unit may leave it out for a word that an earlier unit already boxed. (Picture: imagine a 10 × 10 grid over the page; `[0.10, 0.12, 0.30, 0.21]` starts 1 column in and a bit more than 1 row down, and is 3 columns wide and 2 rows high.) Open the page again and check that the box really holds the picture — `pictures` (step 4) shows every box cut out.
+  - `show` (optional, normally left out): which of the three pictures the child sees at first — see rule 2.
 - `patterns`: the target sentence patterns with the changing part written as `___` — e.g. `"What's this? It's a ___."` — plus a short `function` ("asking about things"). Write a pattern only when the book shows it as a pattern (a box with a gap, or the same sentence with different words). A pattern with exactly one `___` lets the app make grammar practice from it.
 - `sentences`: the model sentences printed in the unit — speech bubbles, dialogue lines, pattern boxes, example sentences — **copied exactly** (spelling, punctuation, names). One sentence or short line per entry, up to 25.
 - `readings`: the texts the child reads or chants (dialogues, chants, songs, short stories, "read and …" texts), **copied exactly**. Keep line breaks as `\n`; put the speaker's name before a dialogue line as printed (`"Bill: Hello!"`). A short `title` ("Let's talk", "Chant") and the `page`. Leave out instructions like "Listen and repeat."
@@ -170,17 +176,25 @@ For each unit, read its pages (**at most 8 pages per pass**; for a longer unit, 
 
 ### Step 4 — Draw the pictures → `pictures/<word>.svg` (rule 2)
 
+The drawings are what the child looks at most, so they must be **attractive to a young child** — not just correct. Plain flat shapes with dot eyes and stiff legs look dull and are rejected. Write one script, `resources/.work/<id>/draw-pictures.mjs`, that builds every picture with `tools/draw-kit.mjs` and writes `pictures/<file>.svg` (`node resources/.work/<id>/draw-pictures.mjs`); fixing a picture is then a small edit and a re-run.
+
 For every word of the book (each once), in unit order:
 
 1. **Look at the book's picture**: open the page image of its `pic` box (or the page where the word is taught) with the Read tool. Note what it shows: the object (or the person/action), its main colours, the view or pose, the background if the picture is a place (sea, zoo, village).
-2. **Draw it** as an SVG — your own simple version of that picture:
-   - `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">` … `</svg>`; the subject centred and filling about 80 % of the square; transparent background, unless the word is a place or a scene (then a simple background like the book's).
-   - The book's cartoon look: a dark outline (`#2b2d42`, 4–6 px, round joins), flat fills in the book's colours with one lighter and one darker shade; gradients are fine.
-   - People and family words: a friendly child-like character with the same hair and clothes colours as the book's person. Action words (sliding, riding): a child doing that action as in the book. Number words: the digits, big and chunky, in the book's colours (the only text allowed).
-   - Only drawing parts (§6 "Drawings"): no letters or words, no embedded images, no links, no scripts; at most 20 000 characters (2–8 KB is normal).
+2. **Draw it** in the kit's **cute sticker style** — your own version of that picture:
+   - 256 × 256 (`svg()` of the kit); the subject centred and filling about 80 % of the square; transparent background, unless the word is a place or a scene (then `scene()` — a rounded square with a sky, ground and the book's main things).
+   - **Look**: one warm dark-brown outline (`INK`, `O` = 4.5 px outside, `O3`/`O2` inside), round joins; **soft gradients** (`soft(colour)` for most parts, `ball(colour)` for round things) in the book's colours — never only flat fills; a **white gloss** on shiny things (`gloss()`, `shine()`); a **soft shadow** under things that stand (`shadow()`); parts that overlap drawn back to front, so there are no stray lines (`merged()` style: outline pass, then fill pass).
+   - **Animals** (the most important): **chibi** — a big head (about half the height), a small round body, short round legs; the **face turned to the child** even when the body is seen from the side; **big shiny eyes** (`eye()`, with the two white sparkles), **rosy cheeks** (`cheek()`), a small smile (`smile()`, `catMouth()`); ears with a pink inside. Keep the features that tell the animals apart: fox = orange, pointed black-tipped ears, white cheeks, bushy tail with a white tip; zebra = black stripes on body, legs and face, dark muzzle, mane; ox = horns, muzzle; zebu = hump, droopy ears; elephant = big ears, trunk; giraffe = long neck, spots. A small animal sits facing the child; a big one stands sideways with its head turned to the child.
+   - **People** (family words): big head, big shiny eyes, eyebrows, rosy cheeks, a happy open smile (`openSmile()`), hair with a shine — with the same hair, clothes and accessories as the book's person (glasses, cardigan, curls …), from the shoulders up. **Action words** (sliding, riding, driving): a happy chibi child doing that action, as in the book (helmet on the bike, arms up on the slide).
+   - **Things**: the book's shape and colours, with volume (gradient + gloss + shadow). No faces on things unless the book's picture has one. **Number words**: `digits("16", …)` — bubble numbers drawn as paths, decorated like the book's (dots, sprinkles, two colours); never `<text>`.
+   - A few `sparkle()`s may cheer up an empty corner; nothing else that is not in the book's picture.
+   - Only drawing parts (§6 "Drawings"): no letters or words, no embedded images, no links, no scripts; at most 20 000 characters (2–10 KB is normal).
    - A word that can't be drawn (a greeting, "please"): no file — its emoji stays.
 3. **Save** it as `resources/.work/<id>/pictures/<file>.svg`: the word in lower case, without a leading a/an/the, every run of other characters as "-" ("teddy bear" → `teddy-bear.svg`, "yo-yos" → `yo-yos.svg`). `check` prints the expected name of every missing drawing.
-4. **Check them**: `node tools/book-package.mjs pictures resources/.work/<id>` writes `pictures-sheet.png` (more sheets for long books) with the book's picture and your drawing side by side. Open each sheet with the Read tool and **redraw** every drawing a 4-year-old would not recognize, that doesn't look like the book's picture (wrong object, colours or pose), or that is cut off or too small. At most two rounds of redrawing.
+4. **Check them**, both ways, with the Read tool:
+   - `node tools/book-package.mjs pictures resources/.work/<id> --big` → `pictures-big-1.png` …: your drawings alone, large. Would a 4-year-old smile at it and want to tap it? Redraw anything that looks flat, stiff, unfinished, crowded or odd (eyes too small, legs like sticks, parts not joined, a shape you can't name at first sight, a part cut off at the edge).
+   - `node tools/book-package.mjs pictures resources/.work/<id>` → `pictures-sheet.png` …: the book's picture next to your drawing (and every `pic` box cut out). Redraw anything that does not look like the book's picture (wrong object, colours or pose), and fix any box that does not hold the word's picture.
+   - Up to three rounds of redrawing; in the report, name the drawings that are still the least like the book's picture.
 
 The drawings are your own artwork, so they may be published with a public package. The book's own pictures and page images are never published.
 
@@ -192,7 +206,7 @@ When all units are written, build a draft (lessons still empty) — kept in the 
 node tools/book-package.mjs assemble resources/.work/<id> --out resources/.work/<id>/draft.json -v
 ```
 
-Read the **Level** line: stage, ages, max words per sentence, questions per quiz, session minutes, writing yes/no, reads instructions yes/no. Write every lesson in step 6 to those numbers (§7). Fix any unit problem it reports (fewer than 3 words, missing emoji, missing drawings) now.
+Read the **Level** line: stage, ages, max words per sentence, questions per quiz, session minutes, writing yes/no, reads instructions yes/no. Write every lesson in step 6 to those numbers (§7). Fix any unit problem it reports (fewer than 3 words, missing emoji, drawings or book picture boxes) now.
 
 ### Step 6 — Each unit's lessons → `lessons/uNN.json`
 
@@ -221,11 +235,12 @@ What each type should be:
 
 1. `node tools/book-package.mjs assemble resources/.work/<id> -v` (add `--out resources/packages/<id>.json` for a private book). It puts the units, lessons and drawings into the package (raising `version` when the content changed), runs `check`, and — for the default output — rebuilds `content/books/index.json`.
 2. Fix every ❌ in the work files and assemble again until there are no errors. Fix every ⚠️ **rule 2** and **rule 4** warning unless there is a clear reason (say it in the report); look at the other ⚠️ and fix what is really wrong.
-3. Report to the parent (in Vietnamese if the parent writes Vietnamese): book title, level and ages, a short table per unit (words, drawings, patterns, sentences, readings, lessons written), how each of the four rules was met (drawings made / redrawn, anything left as emoji and why), what you were unsure about (low confidence), and the next steps:
+3. Report to the parent (in Vietnamese if the parent writes Vietnamese): book title, level and ages, a short table per unit (words, drawings, patterns, sentences, readings, lessons written), how each of the four rules was met (drawings made / redrawn, how many words have all three pictures, anything left as emoji and why), what you were unsure about (low confidence), and the next steps:
    - default output: push the repo to GitHub; the book appears in **Books** in every browser that opens the site;
    - private output: **Parent → Books → 📦 Import a book package** → choose `resources/packages/<id>.json`;
    - then **Children → Edit** → tick the book for the child;
-   - optional: **📎 Add the book's PDF** in the book's page to see the book pages (for the parent) and the book's own pictures for words without a drawing (in that browser only).
+   - optional: **📎 Add the book's PDF** in the book's page to see the book pages (for the parent) and to be able to choose the book's own pictures (in that browser only);
+   - review the pictures: each unit → **📖 From the book** → *Picture your child sees*: ✏️ drawing / 📖 book picture / 😀 emoji per word, or **All words** for the whole unit → **💾 Save**.
 
 Don't publish the PDF or page images anywhere, and don't commit anything in `resources/`.
 
@@ -268,8 +283,9 @@ The finished package (`assemble` builds it from the work files):
 | `order` | integer ≥ 1 | unique |
 | `title`, `topic` | string | required |
 | `pages` | `[first, last]` | PDF page indexes, last ≥ first, ≤ pageCount |
-| `vocabulary` | `[{ word, emoji, vi?, partOfSpeech?, page?, pic? }]` | ≥ 3 words, or the app can't make lessons |
-| `vocabulary[].pic` | `{ page, box: [left, top, width, height] }` | fractions 0–1 of the page image |
+| `vocabulary` | `[{ word, emoji, vi?, partOfSpeech?, page?, pic, show? }]` | ≥ 3 words, or the app can't make lessons |
+| `vocabulary[].pic` | `{ page, box: [left, top, width, height] }` | fractions 0–1 of the page image; every word (rule 2) |
+| `vocabulary[].show` | `"drawing"` \| `"book"` \| `"emoji"` | optional: the picture the child sees at first (left out = drawing, then book picture, then emoji) |
 | `patterns` | `[{ text, function, page? }]` | the slot as `___` |
 | `sentences` | `string[]` | exactly as printed, ≤ 25 |
 | `readings` | `[{ title, text, page? }]` | exactly as printed, `\n` line breaks |
@@ -328,15 +344,19 @@ A drawing is a plain SVG picture (checked by `src/lib/safeSvg.js` — in `check`
 - no `href` / `xlink:href`, no `<image>`, `<use>`, `<script>`, `<style>`, `<foreignObject>`, no `on…=` attributes, no `url(…)` except to an id inside the drawing (`url(#grad1)`), no comments or `<!…>`;
 - at most 20 000 characters.
 
-Example (a kite — dark outline, flat colours, a lighter shade):
+`svg()` of `tools/draw-kit.mjs` writes a valid wrapper and the gradients / clip paths the parts asked for. Example — a kitten sitting and looking at the child (in `draw-pictures.mjs`):
 
-```svg
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
-  <path d="M128 24 L206 112 L128 204 L50 112 Z" fill="#ff8a3d" stroke="#2b2d42" stroke-width="6" stroke-linejoin="round"/>
-  <path d="M128 24 L128 204 M50 112 L206 112" stroke="#2b2d42" stroke-width="4"/>
-  <path d="M128 24 L206 112 L128 112 Z" fill="#ffc83d"/>
-  <path d="M128 204 C116 220 140 230 128 246" fill="none" stroke="#2b2d42" stroke-width="4" stroke-linecap="round"/>
-</svg>
+```js
+import { svg, soft, ball, O, shadow, tube, eye, cheek, catMouth } from "../../../tools/draw-kit.mjs";
+const fur = "#ffd54f";
+P.kitten = svg(
+  shadow(128, 232, 74) +                                                                     // on the ground
+  tube("M168 216 C214 220 230 182 220 154", fur, 15) +                                       // tail
+  `<path d="M84 224 C70 196 82 156 128 152 C174 156 186 196 172 224 C150 234 106 234 84 224 Z" fill="${soft(fur)}" ${O}/>` + // small body
+  `<path d="M60 84 C54 56 58 34 70 24 C86 32 102 46 110 58 Z" fill="${soft(fur)}" ${O}/>` +  // ear (and the other one)
+  `<ellipse cx="128" cy="108" rx="76" ry="64" fill="${ball(fur)}" ${O}/>` +                 // big head
+  eye(98, 106, 15) + eye(158, 106, 15) + cheek(76, 132, 12) + cheek(180, 132, 12) + catMouth(128, 140, 9),
+);
 ```
 
 ## 7. Level rules
@@ -356,7 +376,7 @@ The site computes the level from the grade (and from the content when the grade 
 
 - [ ] Every unit from the contents is there, in order, with the right PDF page ranges.
 - [ ] **Rule 1** — words, sentences and reading texts are copied exactly from the pages; every sentence in the lessons is a book sentence, a book pattern with a book word, or (for a "No" question) a book sentence with one unit word swapped; `check` shows no ❌ rule 1.
-- [ ] **Rule 2** — every unit word has a drawing that looks like the book's picture (checked on the `pictures` sheet); every word has one emoji and the lessons use that emoji; `check` shows no ⚠️ rule 2 (or the report says why).
+- [ ] **Rule 2** — every word has its three pictures: a drawing in the cute sticker style that looks like the book's picture (checked on the `pictures` and `pictures --big` sheets: animals and people chibi, with big shiny eyes and rosy cheeks), a `pic` box that holds the book's picture, and one emoji that the lessons use; `check` shows no ⚠️ rule 2 (or the report says why).
 - [ ] **Rule 3** — every reading passage is a book text, word for word, with its line breaks.
 - [ ] **Rule 4** — one idea per question, the standard short instructions, at most 3 choices for non-readers, sentences within the level's limit, short friendly explanations; `check` shows no ⚠️ rule 4.
 - [ ] Each unit has the lesson types it can have (`grammar` when it has a pattern, `reading` when it has a text).

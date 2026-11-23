@@ -12,6 +12,7 @@ import {
 import { flushSave, migrateAgain, newId, saveNow, tx } from "./db.js";
 import { reassessBook, quickPackForUnit } from "./content.js";
 import { drawnMap, picturesForItem, unitCovers } from "./pictures.js";
+import { wordPictures } from "@/lib/pictures.js";
 import { generateBookResources, generateUnitResources } from "./books/resources.js";
 import { bookIdFor, cropBlob, fileHash, gradeHintFromName, hasPages, pageBlob, removePages, renderPdfPages } from "./books/pages.js";
 import { buildTopicItems, topicGames } from "./topics.js";
@@ -466,9 +467,12 @@ on("POST", "/api/tts/prepare", async (req) => {
 on("GET", "/api/units/:unitId", async (_req, { unitId }) => {
   const unit = getUnit(unitId);
   if (!unit) return fail("Unit not found", 404);
-  const siblings = listUnits(unit.bookId).map((u) => ({ id: u.id, order: u.order, title: u.title }));
+  const all = listUnits(unit.bookId);
+  const siblings = all.map((u) => ({ id: u.id, order: u.order, title: u.title }));
   const book = getBook(unit.bookId);
-  return ok({ unit, book: book && { ...book, hasPages: hasPages(book.id) }, items: listItems({ unitId }), siblings, drawn: drawnMap(unit.bookId) });
+  // The book pictures and choices of this unit's words in earlier units (used when a word here has none).
+  const earlier = wordPictures(all.filter((u) => u.order < unit.order).reverse().map((u) => u.extract));
+  return ok({ unit, book: book && { ...book, hasPages: hasPages(book.id) }, items: listItems({ unitId }), siblings, drawn: drawnMap(unit.bookId), earlier: { pic: Object.fromEntries(earlier.pic), show: Object.fromEntries(earlier.show) } });
 });
 
 on("PATCH", "/api/units/:unitId", async (req, { unitId }) => {

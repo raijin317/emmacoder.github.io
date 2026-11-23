@@ -34,7 +34,7 @@ Chuyển dữ liệu từ bản desktop: ở app cũ vào Settings → Export ba
 
 ## Nhập sách bằng Claude (Import_Book.md)
 
-Muốn có bộ bài học đầy đủ như tính năng "Import Book" của bản desktop: đặt PDF vào `resources/book/` (không bao giờ được đưa lên GitHub) và nói với Claude *"Đọc Import_Book.md và import sách `resources/book/<tên file>.pdf`"*. Claude đọc sách, **vẽ hình cho từng từ** (giống hình trong sách, hiện cho bé mà không cần PDF), viết từng unit và các bài học theo 4 quy tắc bài học, rồi tạo **gói sách** `content/books/<bookId>.json`:
+Muốn có bộ bài học đầy đủ như tính năng "Import Book" của bản desktop: đặt PDF vào `resources/book/` (không bao giờ được đưa lên GitHub) và nói với Claude *"Đọc Import_Book.md và import sách `resources/book/<tên file>.pdf`"*. Claude đọc sách, **vẽ hình cho từng từ** (giống hình trong sách, kiểu hoạt hình dễ thương, hiện cho bé mà không cần PDF), viết từng unit và các bài học theo 4 quy tắc bài học, rồi tạo **gói sách** `content/books/<bookId>.json`. Mỗi từ có 3 lựa chọn hình — ✏️ hình Claude vẽ, 📖 hình trong sách (khi đã thêm PDF), 😀 emoji — phụ huynh chọn ở trang unit → **📖 From the book** → *Picture your child sees*:
 
 - Gói trong `content/books/` (liệt kê ở `content/books/index.json`) được web **tự nạp** khi mở — push lên GitHub là mọi trình duyệt đều có sách đó. Gói có phiên bản mới thì được nạp lại, nhưng phần phụ huynh đã sửa được giữ nguyên.
 - Muốn **riêng tư** thì nói thêm "giữ riêng tư": gói nằm ở `resources/packages/` và bạn tự nhập bằng **Parent → Books → 📦 Import a book package**.
@@ -66,7 +66,8 @@ src/components/       giao diện chung (kids, ui, Pic, ApiImg)
 src/features/         các màn hình (child, parent, players, present, print)
 src/server/           "server" chạy trong trình duyệt: db.js (sql.js + IndexedDB), repo.js, routes.js (các /api/…),
                       books/pages.js (dựng trang PDF, cắt hình), books/resources.js, topics.js
-tools/                app.src.css (nguồn CSS), serve.mjs (server thử), book-package.mjs (tạo / kiểm tra gói sách)
+tools/                app.src.css (nguồn CSS), serve.mjs (server thử), book-package.mjs (tạo / kiểm tra gói sách),
+                      draw-kit.mjs (bộ công cụ vẽ hình cho gói sách)
 content/books/        gói sách do Claude tạo theo Import_Book.md (index.json + <bookId>.json)
 Import_Book.md        chỉ dẫn cho Claude khi nhập một sách PDF
 ```
